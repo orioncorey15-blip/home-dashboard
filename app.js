@@ -1684,9 +1684,20 @@
       return "intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;S.browser_fallback_url=" +
         encodeURIComponent(back) + ";end";
     }
+    var helpOpen = false, returnFocus = null;
     function showHelp(on) {
       var h = $("bt-help");
-      if (h) h.style.display = on ? "" : "none";
+      if (!h) return;
+      h.style.display = on ? "" : "none";
+      if (on && !helpOpen) {
+        returnFocus = document.activeElement;
+        var first = $("bt-close") || $("bt-try");
+        if (first && first.focus) first.focus();
+      } else if (!on && helpOpen && returnFocus && returnFocus.focus) {
+        try { returnFocus.focus(); } catch (e) { /* element may be gone */ }
+        returnFocus = null;
+      }
+      helpOpen = !!on;
     }
     function tryIntentUrl() {
       window.location.href = intentWithFallback();
@@ -1703,6 +1714,14 @@
       if ($("bt-close")) $("bt-close").addEventListener("click", function () { showHelp(false); });
       if ($("bt-try")) $("bt-try").addEventListener("click", function () { showHelp(false); tryIntentUrl(); });
       if ($("bt-help")) $("bt-help").addEventListener("click", function (e) { if (e.target === $("bt-help")) showHelp(false); });
+      // Esc closes the how-to. Capture phase so it wins over the day modal underneath it.
+      document.addEventListener("keydown", function (e) {
+        if (helpOpen && (e.keyCode === 27 || e.key === "Escape")) {
+          showHelp(false);
+          if (e.stopPropagation) e.stopPropagation();
+          if (e.preventDefault) e.preventDefault();
+        }
+      }, true);
     }
     return { init: init, open: open, INTENT: INTENT };
   })();
