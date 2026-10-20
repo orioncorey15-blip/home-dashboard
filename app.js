@@ -445,7 +445,7 @@
   }, 10 * 60 * 1000);
 
   /* ===== CALENDAR ===== */
-  var HOLIDAY_RE = /Day|Birthday|Holiday|Christmas|Thanksgiving|Halloween|Easter|New Year/i;
+  var HOLIDAY_RE = /\s+Day\s*$|\bBirthday\b|\bHolidays?\b|\bChristmas\b|\bThanksgiving\b|\bHalloween\b|\bEaster\b|\bNew Year/i;
   var calEvents = [];
   var calLoaded = false;
 
