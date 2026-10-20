@@ -36,8 +36,10 @@ var CONFIG = {
   // YouTube favourites shown as quick buttons on the Media page.
   // id = the video ID (the part after "v=" in a YouTube link) or a full link.
   YOUTUBE_FAVORITES: [
-    { title: "Lofi Girl radio", id: "jfKfPfyJRdk" },
-    { title: "Fireplace", id: "L_LUpnjgPso" }
+    // (checked Oct 2026 to allow embedding; some channels, e.g. the Lofi Girl live radio, refuse)
+    { title: "Lofi study", id: "lTRiuFIWV54" },
+    { title: "Fireplace", id: "L_LUpnjgPso" },
+    { title: "Rain", id: "mPZkdNFkNps" }
   ],
 
   // Bluetooth button: set to true after turning on Fully Kiosk →
