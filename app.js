@@ -145,7 +145,7 @@
     });
 
     toggleClass(document.body, "home-active", pageId === "home");
-    if (pageId !== "home") toggleClass($("sidebar"), "open", false);
+    toggleClass($("sidebar"), "open", false); // any nav tap (incl. Home) closes the slide-out menu
 
     var fsBtn = $("fs-btn");
     if (fsBtn) fsBtn.style.display = (pageId === "photos" && FS_SUPPORTED) ? "block" : "none";
