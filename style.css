@@ -188,12 +188,27 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 .media-volume > * + * { margin-top: 12px; }
 /* Vertical slider via rotation: works in every browser (the old
    "-webkit-appearance: slider-vertical" trick is deprecated/removed). */
-.volume-slider-wrap { position: relative; width: 40px; height: 180px; }
+.volume-slider-wrap { position: relative; width: 56px; height: 240px; }
 .volume-slider {
-  position: absolute; top: 50%; left: 50%; width: 180px; height: 40px;
-  margin: -20px 0 0 -90px;
+  position: absolute; top: 50%; left: 50%; width: 240px; height: 56px;
+  margin: -28px 0 0 -120px;
   -webkit-transform: rotate(-90deg); transform: rotate(-90deg);
+  /* Big custom slider: thick track (filled part painted by app.js via background-size) and a large thumb */
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  background-color: transparent;
+  background-image: linear-gradient(#1e88e5, #1e88e5), linear-gradient(#444, #444);
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 50%, 0 50%;
+  background-size: 60% 14px, 100% 14px;
+  border-radius: 7px; cursor: pointer; outline: none;
 }
+.volume-slider::-webkit-slider-runnable-track { height: 14px; background: transparent; border: none; }
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 40px; height: 40px; margin-top: -13px;
+  border-radius: 50%; background: #fff; border: 4px solid #1e88e5; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.volume-slider::-moz-range-track { height: 14px; background: transparent; border: none; }
+.volume-slider::-moz-range-thumb { width: 32px; height: 32px; border-radius: 50%; background: #fff; border: 4px solid #1e88e5; }
 .mute-btn { background: #2a2a2a; border: none; color: #fff; padding: 8px 16px; min-height: 44px; min-width: 64px; border-radius: 8px; cursor: pointer; }
 .mute-btn.active { background: #c62828; }
 
@@ -276,8 +291,8 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
   .media-shortcuts > * + * { margin-top: 0; margin-left: 12px; }
   .media-volume { flex-direction: row; justify-content: space-between; }
   .media-volume > * + * { margin-top: 0; margin-left: 12px; }
-  .volume-slider-wrap { width: auto; height: 44px; -webkit-flex: 1; flex: 1; }
-  .volume-slider { position: static; width: 100%; height: 44px; margin: 0; -webkit-transform: none; transform: none; }
+  .volume-slider-wrap { width: auto; height: 56px; -webkit-flex: 1; flex: 1; }
+  .volume-slider { position: static; width: 100%; height: 56px; margin: 0; -webkit-transform: none; transform: none; }
   .cal-day { min-height: 64px; padding: 4px; }
 }
 

@@ -804,6 +804,13 @@
   var outputText = document.querySelector(".media-output strong");
   var homeNowPlaying = $("home-nowplaying-text");
 
+  // Paint the filled part of the (custom-styled) volume slider.
+  function paintVolume() {
+    if (!volumeSlider) return;
+    var v = Math.max(0, Math.min(100, Number(volumeSlider.value) || 0));
+    volumeSlider.style.backgroundSize = v + "% 14px, 100% 14px";
+  }
+
   function updateNowPlaying() {
     var text = isPlaying ? String(activeSource).toUpperCase() + " · Playing" : "Not Playing";
     if (playStatus) playStatus.textContent = isPlaying ? "Playing" : "Not Playing";
@@ -828,18 +835,24 @@
     });
   });
 
-  if (volumeSlider) volumeSlider.addEventListener("input", function () {
+  function onVolumeInput() {
     var v = Number(volumeSlider.value);
     isMuted = v === 0;
     if (!isMuted) volumeLevel = v; // remember last non-zero level for un-mute
     toggleClass(muteBtn, "active", isMuted);
     store.set("volumeLevel", volumeLevel);
     store.set("isMuted", isMuted);
-  });
+    paintVolume();
+  }
+  if (volumeSlider) {
+    volumeSlider.addEventListener("input", onVolumeInput);
+    volumeSlider.addEventListener("change", onVolumeInput); // very old WebViews only fire "change"
+  }
 
   if (muteBtn) muteBtn.addEventListener("click", function () {
     isMuted = !isMuted;
     if (volumeSlider) volumeSlider.value = isMuted ? 0 : (volumeLevel || 60);
+    paintVolume();
     toggleClass(muteBtn, "active", isMuted);
     store.set("isMuted", isMuted);
   });
@@ -873,6 +886,7 @@
       outputText.textContent = connectedOutput;
     }
     updateNowPlaying();
+    paintVolume();
   }
   restoreMediaState();
 
