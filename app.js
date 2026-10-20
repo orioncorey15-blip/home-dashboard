@@ -948,6 +948,20 @@
   document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("webkitvisibilitychange", onVisibility);
 
+  /* ===== OFFLINE START-UP (service worker) ===== */
+  // Caches the app so it still opens if Wi-Fi is down when the tablet boots.
+  // Only where supported (Chrome 40+) and allowed (https or localhost).
+  (function registerServiceWorker() {
+    var secure = window.location.protocol === "https:" ||
+      /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+    if (!secure || !("serviceWorker" in navigator) || !window.Promise) return;
+    try {
+      navigator.serviceWorker.register("sw.js")["catch"](function (e) {
+        if (window.console) console.warn("Service worker not registered:", e && e.message);
+      });
+    } catch (e) { /* ignore */ }
+  })();
+
   /* ===== INIT ===== */
   showPage("home");
   renderCalendarAll();
