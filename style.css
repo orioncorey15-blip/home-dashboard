@@ -811,3 +811,12 @@ body.playing .eq i:nth-child(4) { -webkit-animation-delay: 0.1s; animation-delay
   .calendar-grid > div { display: inline-block; vertical-align: top; width: 13.2%; margin: 0 0.5% 8px 0; }
   .media-layout > * { margin-bottom: 18px; }
 }
+
+/* Narrower landscape screens (e.g. 1024x600): keep the forecast rows readable */
+@media (max-width: 1100px) and (orientation: landscape) {
+  .day-desc { display: none; }
+  .day-name { -webkit-flex: 1; flex: 1; }
+  .hour { min-width: 40px; margin: 0 2px; }
+  .hour-temp { font-size: 16px; }
+  .hour-time { font-size: 11px; }
+}
