@@ -2,320 +2,190 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Home Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#121212">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-
-<body>
-
-<header id="header">
-  <div id="clock">
-    <div class="time" id="time"></div>
-    <div class="date" id="date"></div>
-  </div>
-</header>
-
-<div id="container">
-
-  <nav id="sidebar">
-    <button class="nav-btn active" onclick="showPage('home')">H</button>
-    <button class="nav-btn" onclick="showPage('calendar')">C</button>
-    <button class="nav-btn" onclick="showPage('weather')">W</button>
-    <button class="nav-btn" onclick="showPage('media')">M</button>
-    <button class="nav-btn" onclick="showPage('photos')"></button>
-  </nav>
-
-  <main id="content">
-
-<section class="page active" id="home">
-
-<button id="menuToggle" onclick="toggleSidebar()"></button>
-
-<div class="home-grid">
-
-  <!-- CLOCK -->
-  <div class="card home-clock">
-    <div class="clock-time" id="home-time"></div>
-    <div class="clock-date" id="home-date"></div>
-  </div>
-
-  <!-- WEATHER -->
-<div class="card home-weather">
-
-  <!-- TOP: Large Centered Temp -->
-  <div class="home-weather-top">
-    <div class="home-temp" id="home-temp">--°</div>
-    <div class="home-desc" id="home-desc">Loading…</div>
-    <div class="home-feels" id="home-feels"></div>
-  </div>
-
-  <!-- BOTTOM: Two Columns -->
-  <div class="home-weather-bottom">
-
-    <!-- LEFT COLUMN -->
-    <div class="weather-col">
-      <div class="stat">
-        <span class="label">Humidity</span>
-        <span id="home-humidity"></span>
-      </div>
-
-      <div class="stat">
-        <span class="label">Wind</span>
-        <span id="home-wind"></span>
-      </div>
-
-      <div class="stat">
-        <span class="label">Visibility</span>
-        <span id="home-visibility"></span>
-      </div>
+<body class="home-active">
+  <header id="header">
+    <div id="clock">
+      <div class="time" id="time"></div>
+      <div class="date" id="date"></div>
     </div>
+  </header>
 
-    <!-- RIGHT COLUMN -->
-    <div class="weather-col">
-      <div class="stat">
-        <span class="label">Sunrise</span>
-        <span id="home-sunrise"></span>
-      </div>
+  <div id="container">
+    <nav id="sidebar">
+      <button class="nav-btn active" data-page="home" aria-label="Home">
+        <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </button>
+      <button class="nav-btn" data-page="calendar" aria-label="Calendar">
+        <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+      </button>
+      <button class="nav-btn" data-page="weather" aria-label="Weather">
+        <svg viewBox="0 0 24 24"><path d="M6.5 20q-2.3 0-3.9-1.6T1 14.5q0-1.9 1.2-3.3T5.3 9.3q.5-2.2 2.2-3.6T11.5 4q2.5 0 4.3 1.6t2.1 4q1.9.3 3.1 1.7t1.2 3.2q0 2.1-1.5 3.5T17.5 20z"/></svg>
+      </button>
+      <button class="nav-btn" data-page="media" aria-label="Media">
+        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3z"/></svg>
+      </button>
+      <button class="nav-btn" data-page="photos" aria-label="Photos">
+        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5z"/></svg>
+      </button>
+    </nav>
 
-      <div class="stat">
-        <span class="label">Sunset</span>
-        <span id="home-sunset"></span>
-      </div>
-    </div>
+    <main id="content">
+      <!-- HOME -->
+      <section class="page active" id="home">
+        <button id="menuToggle" aria-label="Menu">â˜°</button>
+        <div class="home-grid">
+          <div class="card home-clock">
+            <div class="clock-time" id="home-time"></div>
+            <div class="clock-date" id="home-date"></div>
+          </div>
 
-  </div>
+          <div class="card home-weather">
+            <div class="home-weather-top">
+              <div class="home-temp" id="home-temp">--Â°</div>
+              <div class="home-desc" id="home-desc">Loadingâ€¦</div>
+              <div class="home-feels" id="home-feels"></div>
+            </div>
+            <div class="home-weather-bottom">
+              <div class="weather-col">
+                <div class="stat"><span class="label">Humidity</span><span id="home-humidity"></span></div>
+                <div class="stat"><span class="label">Wind</span><span id="home-wind"></span></div>
+                <div class="stat"><span class="label">Visibility</span><span id="home-visibility"></span></div>
+              </div>
+              <div class="weather-col">
+                <div class="stat"><span class="label">Sunrise</span><span id="home-sunrise"></span></div>
+                <div class="stat"><span class="label">Sunset</span><span id="home-sunset"></span></div>
+              </div>
+            </div>
+          </div>
 
-</div>
+          <div class="card home-today">
+            <div class="today-header">
+              <div class="today-label">TODAY</div>
+              <div class="today-date" id="today-date"></div>
+            </div>
+            <div id="today-events" class="today-events"></div>
+          </div>
 
-  <!-- TODAY -->
-<div class="home-today card">
-  <div class="today-header">
-    <div class="today-label">TODAY</div>
-    <div class="today-date" id="today-date"></div>
-  </div>
+          <div class="card slideshow-card">
+            <div class="home-slideshow">
+              <img id="home-slideshow-img" alt="Photo" referrerpolicy="no-referrer" />
+            </div>
+          </div>
 
-  <div id="today-events" class="today-events"></div>
-</div>
+          <div class="card home-nowplaying">
+            <div class="nowplaying-label">NOW PLAYING</div>
+            <div id="home-nowplaying-text">Not Playing</div>
+          </div>
 
-  <!-- SLIDESHOW -->
-<div class="card slideshow-card">
-  <div class="card-title"></div>
-  <div class="home-slideshow">
-    <img id="home-slideshow-img" />
-  </div>
-</div>
-
-  <!-- NOW PLAYING -->
-  <div class="home-nowplaying card">
-    NOW PLAYING
-  </div>
-
-  <!-- NIGHT MODE -->
-  <div class="home-night card">
-    NIGHT MODE
-  </div>
-
-</div>
-</section>
-
-<section class="page" id="calendar">
-
-
-  <div id="calendar-grid" class="calendar-grid"></div>
-</section>
-      
-
-<section class="page" id="weather">
-
-  <!-- TOP ROW -->
-  <div class="weather-top">
-
-    <div class="weather-current card">
-      <div class="current-left">
-        <div id="weather-temp">--°</div>
-        <div id="weather-desc">Loading…</div>
-        <div id="weather-feels"></div>
-      </div>
-
-      <div class="current-right">
-        <div class="stat">
-          <span class="label">Humidity</span>
-          <span id="weather-humidity"></span>
+          <div class="card home-night">
+            <button id="night-toggle" class="night-btn">Night Mode</button>
+          </div>
         </div>
+      </section>
 
-        <div class="stat">
-          <span class="label">Wind</span>
-          <span id="weather-wind"></span>
+      <!-- CALENDAR -->
+      <section class="page" id="calendar">
+        <div id="calendar-grid" class="calendar-grid"></div>
+      </section>
+
+      <!-- WEATHER -->
+      <section class="page" id="weather">
+        <div class="weather-top">
+          <div class="weather-current card">
+            <div class="current-left">
+              <div id="weather-temp">--Â°</div>
+              <div id="weather-desc">Loadingâ€¦</div>
+              <div id="weather-feels"></div>
+            </div>
+            <div class="current-right">
+              <div class="stat"><span class="label">Humidity</span><span id="weather-humidity"></span></div>
+              <div class="stat"><span class="label">Wind</span><span id="weather-wind"></span></div>
+              <div class="stat"><span class="label">Visibility</span><span id="weather-visibility"></span></div>
+            </div>
+          </div>
+          <div class="card weather-radar">
+            <div id="radar-container">Radar not available</div>
+          </div>
         </div>
-
-        <div class="stat">
-          <span class="label">Visibility</span>
-          <span id="weather-visibility"></span>
+        <div class="weather-bottom">
+          <h2>24 Hours</h2>
+          <div id="hourly" class="hourly-row"></div>
+          <h2>6 Day</h2>
+          <div id="daily" class="daily-row"></div>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <div class="card weather-radar">
-      <div id="radar-container">Radar placeholder</div>
-    </div>
+      <!-- MEDIA -->
+      <section class="page" id="media">
+        <div class="media-layout">
+          <div class="card media-nowplaying">
+            <div class="album-art">Album Art</div>
+            <div class="now-playing">
+              <strong id="play-status">Not Playing</strong><br>
+              <span id="track-info">Artist Â· Album</span>
+            </div>
+            <div class="media-controls">
+              <button class="icon-btn" id="prev-btn" aria-label="Previous">
+                <svg viewBox="0 0 24 24"><polygon points="15,6 9,12 15,18"></polygon><rect x="6" y="6" width="2" height="12"></rect></svg>
+              </button>
+              <button class="icon-btn play" id="play-btn" aria-label="Play / Pause">
+                <svg viewBox="0 0 24 24" class="play-icon"><polygon points="8,5 19,12 8,19"></polygon></svg>
+                <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5" width="4" height="14"></rect><rect x="13" y="5" width="4" height="14"></rect></svg>
+              </button>
+              <button class="icon-btn" id="next-btn" aria-label="Next">
+                <svg viewBox="0 0 24 24"><polygon points="9,6 15,12 9,18"></polygon><rect x="16" y="6" width="2" height="12"></rect></svg>
+              </button>
+            </div>
+          </div>
 
+          <div class="media-shortcuts">
+            <button class="shortcut-btn active" data-source="spotify" title="Spotify">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 9.2c3.4-1 7.4-.6 10.4 1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M7.8 12c2.8-.8 6.1-.5 8.6 1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8.6 14.6c2.2-.6 4.6-.4 6.4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+            <button class="shortcut-btn" data-source="youtube" title="YouTube">
+              <svg viewBox="0 0 24 24"><path d="M23.5 6.2s-.2-1.7-.8-2.5c-.8-.9-1.7-.9-2.1-1C17.7 2.4 12 2.4 12 2.4s-5.7 0-8.6.3c-.4.1-1.3.1-2.1 1-.6.8-.8 2.5-.8 2.5S0 8.2 0 10.1v1.8c0 1.9.2 3.9.2 3.9s.2 1.7.8 2.5c.8.9 1.9.9 2.4 1 1.7.2 7.6.3 8.6.3s5.7 0 8.6-.3c.4-.1 1.3-.1 2.1-1 .6-.8.8-2.5.8-2.5s.2-2 .2-3.9v-1.8c0-1.9-.2-3.9-.2-3.9zM9.75 14.5V7.5l6 3.5-6 3.5z"/></svg>
+            </button>
+            <button class="shortcut-btn" data-source="bluetooth" title="Bluetooth">
+              <svg viewBox="0 0 24 24"><path d="M12 2l4.5 4.5-3.5 3.5 3.5 3.5L12 18V11l-4 4-1.5-1.5 4.5-4.5-4.5-4.5L8 4l4 4V2z"/></svg>
+            </button>
+          </div>
+
+          <div class="card media-volume">
+            <div class="volume-slider-wrap">
+              <input type="range" min="0" max="100" value="60" class="volume-slider" aria-label="Volume">
+            </div>
+            <button class="mute-btn">Mute</button>
+          </div>
+
+          <div class="card media-output">
+            <span class="output-label">Output</span>
+            <strong>Bluetooth Speaker</strong>
+          </div>
+        </div>
+      </section>
+
+      <!-- PHOTOS -->
+      <section class="page" id="photos">
+        <button id="fs-btn" aria-label="Fullscreen" style="display:none">â›¶</button>
+        <div class="photo-frame">
+          <img id="photo-frame-img" alt="Photo Frame" referrerpolicy="no-referrer">
+        </div>
+      </section>
+    </main>
   </div>
 
-  <!-- BOTTOM -->
-  <div class="weather-bottom">
-    <h2>24 Hours</h2>
-    <div id="hourly" class="hourly-row"></div>
-
-    <h2>6 Day</h2>
-    <div id="daily" class="daily-row"></div>
-  </div>
-</section>
-
-<section class="page" id="media">
- 
-
-  <div class="media-layout">
-
-    <!-- LEFT: Album Art + Controls -->
-    <div class="card media-nowplaying">
-      <div class="album-art">Album Art</div>
-
-  <div class="now-playing">
-  <strong id="play-status">Not Playing</strong><br>
-  <span id="track-info">Artist · Album</span>
-</div>
-
-  <div class="media-controls">
-  <button class="icon-btn" id="prev-btn" aria-label="Previous">
-    <!-- Previous -->
-    <svg viewBox="0 0 24 24">
-      <polygon points="15,6 9,12 15,18"></polygon>
-      <rect x="6" y="6" width="2" height="12"></rect>
-    </svg>
-  </button>
-
-  <button class="icon-btn play" id="play-btn" aria-label="Play / Pause">
-    <!-- Play -->
-    <svg viewBox="0 0 24 24" class="play-icon">
-      <polygon points="8,5 19,12 8,19"></polygon>
-    </svg>
-
-    <!-- Pause (hidden by default) -->
-    <svg viewBox="0 0 24 24" class="pause-icon">
-      <rect x="7" y="5" width="4" height="14"></rect>
-      <rect x="13" y="5" width="4" height="14"></rect>
-    </svg>
-  </button>
-
-  <button class="icon-btn" id="next-btn" aria-label="Next">
-    <!-- Next -->
-    <svg viewBox="0 0 24 24">
-      <polygon points="9,6 15,12 9,18"></polygon>
-      <rect x="16" y="6" width="2" height="12"></rect>
-    </svg>
-  </button>
-</div>
-    </div>
-
-    <!-- MIDDLE: Shortcuts -->
-<div class="media-shortcuts">
-<button class="shortcut-btn active" data-source="spotify" title="Spotify">
-<svg viewBox="0 0 24 24" class="spotify-icon" aria-hidden="true">
-  <!-- Outer circle (no fill) -->
-  <circle cx="12" cy="12" r="10"
-          fill="none"
-          stroke="white"
-          stroke-width="1.6"/>
-
-  <!-- Top arc -->
-  <path d="M7 9.2c3.4-1 7.4-.6 10.4 1.2"
-        fill="none"
-        stroke="white"
-        stroke-width="1.6"
-        stroke-linecap="round"/>
-
-  <!-- Middle arc -->
-  <path d="M7.8 12c2.8-.8 6.1-.5 8.6 1"
-        fill="none"
-        stroke="white"
-        stroke-width="1.6"
-        stroke-linecap="round"/>
-
-  <!-- Bottom arc -->
-  <path d="M8.6 14.6c2.2-.6 4.6-.4 6.4.6"
-        fill="none"
-        stroke="white"
-        stroke-width="1.6"
-        stroke-linecap="round"/>
-</svg>
-
-</button>
-<button class="shortcut-btn" data-source="youtube" title="YouTube">
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M23.5 6.2s-.2-1.7-.8-2.5c-.8-.9-1.7-.9-2.1-1
-           C17.7 2.4 12 2.4 12 2.4s-5.7 0-8.6.3
-           c-.4.1-1.3.1-2.1 1-.6.8-.8 2.5-.8 2.5
-           S0 8.2 0 10.1v1.8c0 1.9.2 3.9.2 3.9
-           s.2 1.7.8 2.5c.8.9 1.9.9 2.4 1
-           1.7.2 7.6.3 8.6.3s5.7 0 8.6-.3
-           c.4-.1 1.3-.1 2.1-1 .6-.8.8-2.5.8-2.5
-           s.2-2 .2-3.9v-1.8c0-1.9-.2-3.9-.2-3.9z
-           M9.75 14.5V7.5l6 3.5-6 3.5z"/>
-</svg>
-</button>
-
-<button class="shortcut-btn" data-source="bluetooth" title="Bluetooth">
-<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M12 2l4.5 4.5-3.5 3.5 3.5 3.5L12 18V11l-4 4-1.5-1.5
-           4.5-4.5-4.5-4.5L8 4l4 4V2z"/>
-</svg>
-</button>
-</div>
-
-    <!-- RIGHT: Volume -->
-<div class="card media-volume">
-  <div class="volume-slider-wrap">
-    <input type="range" min="0" max="100" value="60" class="volume-slider">
-  </div>
-  <button class="mute-btn">Mute</button>
-</div>
-
-    <!-- BOTTOM: Output -->
-<div class="card media-output">
-  <span class="output-label">
-<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M12 2l4.5 4.5-3.5 3.5 3.5 3.5L12 18V11l-4 4-1.5-1.5
-           4.5-4.5-4.5-4.5L8 4l4 4V2z"/>
-</svg>
-    Output
-  </span>
-  <strong>Bluetooth Speaker</strong>
-</div>
-
-  </div>
-</section>
-
-<section class="page" id="photos">
-<button id="fs-btn"></button>
-  <div class="photo-frame">
-    <img id="photo-frame-img" src="" alt="Photo Frame">
-  </div>
-  
-</section>
-
-
-  </main>
-</div>
-
-
-<!-- Google API -->
-<script src="https://apis.google.com/js/api.js"></script>
-
-<!-- Google Identity -->
-<script src="https://accounts.google.com/gsi/client"></script>
-
-<!-- YOUR APP -->
-<script src="app.js?v=2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

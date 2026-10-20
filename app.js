@@ -1,754 +1,796 @@
-/**********************
- * PAGE NAVIGATION
- **********************/
+/*
+ * Home Dashboard - app logic.
+ * Written in plain ES5 (no arrow functions, let/const, template strings,
+ * async/await, optional chaining, fetch) so it runs on old Android
+ * Chrome / Samsung Internet / WebView builds.
+ */
+(function () {
+  "use strict";
 
-function showPage(pageId) {
+  var CFG = (typeof CONFIG !== "undefined" && CONFIG) ? CONFIG : {};
+  var SLIDE_MS = Number(CFG.SLIDESHOW_INTERVAL) > 1000 ? Number(CFG.SLIDESHOW_INTERVAL) : 8000;
 
-  // Hide all pages
-  document.querySelectorAll('.page').forEach(p =>
-    p.classList.remove('active')
-  );
+  /* ===== HELPERS ===== */
+  function $(id) { return document.getElementById(id); }
 
-  // Remove active state from sidebar buttons
-  document.querySelectorAll('.nav-btn').forEach(b =>
-    b.classList.remove('active')
-  );
+  // Only touch the DOM when the text actually changes (avoids needless repaints).
+  function setText(id, text) {
+    var el = $(id);
+    text = (text === undefined || text === null) ? "" : String(text);
+    if (el && el.textContent !== text) el.textContent = text;
+  }
 
-  // Show selected page
-  document.getElementById(pageId).classList.add('active');
+  function each(list, fn) { Array.prototype.forEach.call(list || [], fn); }
 
-  // Highlight correct sidebar button
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    if (btn.onclick.toString().includes(pageId)) {
-      btn.classList.add('active');
+  function toggleClass(el, cls, on) {
+    if (!el) return;
+    if (on) el.classList.add(cls); else el.classList.remove(cls);
+  }
+
+  // localStorage can throw (private mode, quota, disabled storage).
+  var store = {
+    get: function (k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { window.localStorage.setItem(k, String(v)); } catch (e) { /* ignore */ } }
+  };
+
+  function isHidden() { return !!(document.hidden || document.webkitHidden); }
+
+  function fmtTime(d) { return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function dayKey(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+
+  /*
+   * GET a JSON URL with a timeout. cb(err, data) is called exactly once.
+   * Uses XMLHttpRequest because it works on every old browser.
+   */
+  function getJSON(url, cb) {
+    var done = false;
+    var xhr = new XMLHttpRequest();
+    function finish(err, data) {
+      if (done) return;
+      done = true;
+      xhr.onload = xhr.onerror = xhr.ontimeout = xhr.onabort = null;
+      cb(err, data);
     }
-  });
-
-  // Toggle home-specific body class
-  document.body.classList.toggle("home-active", pageId === "home");
-
-  // Close sidebar when leaving home
-  if (pageId !== "home") {
-    const sidebar = document.getElementById("sidebar");
-    if (sidebar) sidebar.classList.remove("open");
+    try {
+      xhr.open("GET", url, true);
+      xhr.timeout = 20000;
+      xhr.onload = function () {
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
+        if (xhr.status >= 200 && xhr.status < 300 && data) return finish(null, data);
+        var msg = (data && data.error && (data.error.message || data.error)) || (data && data.message) || "";
+        finish(new Error("HTTP " + xhr.status + (msg ? " - " + msg : "")));
+      };
+      xhr.onerror = function () { finish(new Error("Network error")); };
+      xhr.ontimeout = function () { finish(new Error("Timed out")); };
+      xhr.onabort = function () { finish(new Error("Aborted")); };
+      xhr.send();
+    } catch (e) {
+      finish(e);
+    }
   }
 
-  // Fullscreen button visibility
-  const fsBtn = document.getElementById("fs-btn");
-  if (fsBtn) {
-    fsBtn.style.display = pageId === "photos" ? "block" : "none";
+  /*
+   * A self-rescheduling background job. Uses a setTimeout chain (never
+   * setInterval) so runs can't pile up. On failure it retries with backoff
+   * (30s, 60s, 2m, ... up to the normal interval). A watchdog releases a run
+   * that never reports back, so one stuck request can't stall it forever.
+   */
+  var tasks = [];
+  function makeTask(name, fn, interval) {
+    var t = { name: name, timer: null, guard: null, busy: false, fails: 0, lastOk: 0, runId: 0 };
+
+    function schedule(ms) {
+      clearTimeout(t.timer);
+      t.timer = setTimeout(run, ms);
+    }
+    function finish(id, ok) {
+      if (!t.busy || id !== t.runId) return; // late/duplicate callback
+      t.busy = false;
+      clearTimeout(t.guard);
+      if (ok) {
+        t.fails = 0;
+        t.lastOk = Date.now();
+        schedule(interval);
+      } else {
+        t.fails++;
+        schedule(Math.min(interval, 30000 * Math.pow(2, Math.min(t.fails - 1, 6))));
+      }
+    }
+    function run() {
+      if (t.busy) return;
+      t.busy = true;
+      t.runId++;
+      var id = t.runId;
+      clearTimeout(t.timer);
+      t.guard = setTimeout(function () {
+        if (window.console) console.warn(name + ": timed out, will retry");
+        finish(id, false);
+      }, 60000);
+      try {
+        fn(function (ok) { finish(id, ok !== false); });
+      } catch (e) {
+        if (window.console) console.error(name + " failed:", e);
+        finish(id, false);
+      }
+    }
+    t.run = run;
+    t.isStale = function (maxAge) { return Date.now() - t.lastOk > maxAge; };
+    tasks.push(t);
+    return t;
   }
 
-  // Only load photos when entering photos page
-  if (pageId === "photos") {
-    loadDrivePhotos();
-  }
-}
-
-/**********************
- * CLOCK
- **********************/
-function updateClock() {
-  const now = new Date();
-
-  // Format time
-  const timeString = now.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit"
-  });
-
-  const dateString = now.toLocaleDateString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric"
-  });
-
-  /* ===== Home Clock ===== */
-  const homeTime = document.getElementById("home-time");
-  const homeDate = document.getElementById("home-date");
-
-  if (homeTime) homeTime.textContent = timeString;
-  if (homeDate) homeDate.textContent = dateString;
-
-  /* ===== Header Clock ===== */
-  const headerTime = document.getElementById("time");
-  const headerDate = document.getElementById("date");
-
-  if (headerTime) headerTime.textContent = timeString;
-  if (headerDate) headerDate.textContent = dateString;
-}
-
-updateClock();
-setInterval(updateClock, 1000);
-
-
-
-/**********************
- * WEATHER
- **********************/
-const API_KEY = "1e024bbd575716ce93ea03863c76416f";
-const ZIP = "44004";
-
-async function loadWeather() {
-  try {
-    const current = await fetch(
-      `https://api.openweathermap.org/data/2.5/weather?zip=${ZIP},US&units=imperial&appid=${API_KEY}`
-    ).then(r => r.json());
-
-// Sunrise & Sunset
-const sunrise = new Date(current.sys.sunrise * 1000)
-  .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-const sunset = new Date(current.sys.sunset * 1000)
-  .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-    document.getElementById('weather-temp').textContent = Math.round(current.main.temp) + "°";
-    document.getElementById("weather-feels").textContent =
-  `Feels like ${Math.round(current.main.feels_like)}°`;
-    document.getElementById('weather-desc').textContent = current.weather[0].description;
-    document.getElementById('weather-humidity').textContent =
-  `${current.main.humidity}%`;
-  function windDir(deg) {
-  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
-  return dirs[Math.round(deg / 45) % 8];
-}
-document.getElementById("weather-wind").textContent =
-  `${windDir(current.wind.deg)} ${Math.round(current.wind.speed)} mph` +
-  (current.wind.gust ? ` · Gusts ${Math.round(current.wind.gust)} mph` : "");
-  document.getElementById("weather-visibility").textContent =
-  `Visibility ${(current.visibility / 1609).toFixed(1)} mi`;
-  
-  /* ===== HOME WEATHER ===== */
-const set = (id, value) => {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-};
-
-set("home-temp", Math.round(current.main.temp) + "°");
-set("home-desc", current.weather[0].description);
-set("home-feels", "Feels like " + Math.round(current.main.feels_like) + "°");
-set("home-humidity", current.main.humidity + "%");
-set("home-wind", Math.round(current.wind.speed) + " mph");
-set("home-visibility", (current.visibility / 1609).toFixed(1) + " mi");
-set("home-sunrise", sunrise);
-set("home-sunset", sunset);
-
-    const forecast = await fetch(
-      `https://api.openweathermap.org/data/2.5/forecast?zip=${ZIP},US&units=imperial&appid=${API_KEY}`
-    ).then(r => r.json());
-
-    const hourly = document.getElementById('hourly');
-    const daily = document.getElementById('daily');
-    hourly.innerHTML = "";
-    daily.innerHTML = "";
-
- forecast.list.slice(0, 8).forEach(f => {
-
-  const date = new Date(f.dt * 1000);
-
-  const time = date.toLocaleString("en-US", {
-    hour: "numeric",
-    hour12: true
-  });
-
-  const temp = Math.round(f.main.temp);
-
-  const rainMM = f.rain?.["3h"] || 0;
-  const snowMM = f.snow?.["3h"] || 0;
-  const totalMM = rainMM + snowMM;
-
-  const inches =
-    totalMM > 0 ? (totalMM / 25.4).toFixed(2) : null;
-
-  const percent = Math.round((f.pop || 0) * 100);
-
-  let precipLabel = "Dry";
-
-  if (totalMM > 0 && percent > 0) {
-    precipLabel = `${inches}" · ${percent}%`;
-  } else if (percent > 0) {
-    precipLabel = `${percent}%`;
+  function refreshStale(maxAge) {
+    each(tasks, function (t) { if (t.isStale(maxAge)) t.run(); });
   }
 
-  hourly.innerHTML += `
-    <div class="hour">
-      <div class="hour-time">${time}</div>
-      <div class="hour-temp">${temp}°</div>
-      <div class="hour-precip">${precipLabel}</div>
-    </div>
-  `;
-});
+  /* ===== NAVIGATION ===== */
+  var currentPage = "home";
 
-    const days = {};
+  function showPage(pageId) {
+    if (!$(pageId)) return;
+    currentPage = pageId;
+    each(document.querySelectorAll(".page"), function (p) { toggleClass(p, "active", p.id === pageId); });
+    each(document.querySelectorAll(".nav-btn"), function (b) {
+      toggleClass(b, "active", b.getAttribute("data-page") === pageId);
+    });
 
-forecast.list.forEach(f => {
-  const dayKey = new Date(f.dt * 1000).toDateString();
+    toggleClass(document.body, "home-active", pageId === "home");
+    if (pageId !== "home") toggleClass($("sidebar"), "open", false);
 
-  if (!days[dayKey]) {
-    days[dayKey] = {
-      temps: [],
-      rain: 0,
-      snow: 0,
-      pop: 0
+    var fsBtn = $("fs-btn");
+    if (fsBtn) fsBtn.style.display = pageId === "photos" ? "block" : "none";
+
+    // Show a photo right away when arriving at a page that has a slideshow,
+    // then let the (single) slideshow timer take over.
+    slideshow.onPageChange();
+  }
+
+  each(document.querySelectorAll(".nav-btn"), function (btn) {
+    btn.addEventListener("click", function () { showPage(btn.getAttribute("data-page")); });
+  });
+
+  function toggleSidebar() {
+    if (document.body.classList.contains("home-active")) {
+      var sb = $("sidebar");
+      if (sb) sb.classList.toggle("open");
+    }
+  }
+  window.toggleSidebar = toggleSidebar;
+  if ($("menuToggle")) $("menuToggle").addEventListener("click", toggleSidebar);
+
+  // Tapping anywhere on the home grid closes the slide-out menu.
+  var homeGrid = document.querySelector(".home-grid");
+  if (homeGrid) homeGrid.addEventListener("click", function () { toggleClass($("sidebar"), "open", false); });
+
+  /* ===== CLOCK (+ day-change / wake-from-sleep detection) ===== */
+  var lastTick = Date.now();
+  var lastDay = dayKey(new Date());
+  var startedAt = Date.now();
+  var reloadPending = false;
+
+  function updateClock() {
+    var now = new Date();
+    var timeStr = fmtTime(now);
+    var dateStr = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    setText("home-time", timeStr);
+    setText("home-date", dateStr);
+    setText("time", timeStr);
+    setText("date", dateStr);
+
+    var nowMs = now.getTime();
+    // Device slept / browser was frozen for a while: refresh anything stale.
+    if (nowMs - lastTick > 2 * 60 * 1000) refreshStale(60 * 1000);
+    lastTick = nowMs;
+
+    // Midnight rollover: redraw "Today" + calendar (and new month) right away.
+    var dk = dayKey(now);
+    if (dk !== lastDay) {
+      lastDay = dk;
+      renderCalendarAll();
+      calendarTask.run();
+    }
+
+    maybeDailyReload(now);
+  }
+
+  // Once a day, reload the page to clear any memory build-up in old browsers
+  // and pick up new deploys. Only reloads if the site is reachable, so the
+  // tablet never ends up stuck on an offline error page.
+  function maybeDailyReload(now) {
+    var hour = CFG.DAILY_RELOAD_HOUR;
+    if (hour === null || hour === undefined || hour === false || reloadPending) return;
+    if (now.getHours() !== Number(hour) || now.getMinutes() > 10) return;
+    if (Date.now() - startedAt < 60 * 60 * 1000) return; // loaded recently already
+    reloadPending = true;
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "index.html?ping=" + Date.now(), true);
+    xhr.timeout = 15000;
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 400) window.location.reload();
+      else reloadPending = false;
     };
+    xhr.onerror = xhr.ontimeout = function () { reloadPending = false; };
+    xhr.send();
   }
 
-  days[dayKey].temps.push(f.main.temp);
-  days[dayKey].rain += f.rain?.["3h"] || 0;
-  days[dayKey].snow += f.snow?.["3h"] || 0;
-  days[dayKey].pop = Math.max(days[dayKey].pop, f.pop || 0);
-});
+  updateClock();
+  setInterval(updateClock, 1000);
 
-Object.entries(days).slice(0, 6).forEach(([day, d]) => {
-  const hi = Math.round(Math.max(...d.temps));
-  const lo = Math.round(Math.min(...d.temps));
-
-  const inches = ((d.rain + d.snow) / 25.4).toFixed(2);
-  const percent = Math.round(d.pop * 100);
-
-  const label = new Date(day).toLocaleDateString([], {
-    weekday: "short"
+  /* ===== NIGHT MODE ===== */
+  var nightBtn = $("night-toggle");
+  function setNight(on) {
+    toggleClass(document.body, "night", on);
+    if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
+    store.set("nightMode", on);
+  }
+  if (store.get("nightMode") === "true") setNight(true);
+  if (nightBtn) nightBtn.addEventListener("click", function () {
+    setNight(!document.body.classList.contains("night"));
   });
 
-  daily.innerHTML += `
-    <div class="day">
-      <div class="day-name">${label}</div>
-      <div class="day-temp">${hi}° / ${lo}°</div>
-      <div class="day-precip">${inches}" · ${percent}%</div>
-    </div>
-  `;
-});
+  /* ===== WEATHER ===== */
+  var weatherLoaded = false;
 
-  } catch (e) {
-    console.error("Weather failed:", e);
-  }
-}
-
-loadWeather();
-
-// Is music playing?
-let isPlaying = false;
-
-// Grab things from the page
-const playBtn = document.getElementById("play-btn");
-const playStatus = document.getElementById("play-status");
-const trackInfo = document.getElementById("track-info");
-
-// When the play button is clicked…
-playBtn.addEventListener("click", () => {
-  isPlaying = !isPlaying;
-
-  // Switch the icon
-  playBtn.classList.toggle("paused", isPlaying);
-
-  if (isPlaying) {
-    playStatus.textContent = "Playing";
-    trackInfo.textContent = "Demo Track · Demo Artist";
-  } else {
-    playStatus.textContent = "Not Playing";
-    trackInfo.textContent = "Artist · Album";
-    
-    localStorage.setItem("isPlaying", isPlaying);
-  }
-});
-
-let activeSource = "spotify"; // default
-localStorage.setItem("activeSource", activeSource);
-
-let volumeLevel = 60;
-let isMuted = false;
-
-const volumeSlider = document.querySelector(".volume-slider");
-const muteBtn = document.querySelector(".mute-btn");
-
-volumeSlider.addEventListener("input", () => {
-  volumeLevel = volumeSlider.value;
-
-  if (volumeLevel > 0) {
-    isMuted = false;
-    muteBtn.classList.remove("active");
-    localStorage.setItem("volumeLevel", volumeLevel);
-localStorage.setItem("isMuted", false);
-  }
-});
-
-muteBtn.addEventListener("click", () => {
-  isMuted = !isMuted;
-
-  if (isMuted) {
-    volumeSlider.value = 0;
-    muteBtn.classList.add("active");
-  } else {
-    volumeSlider.value = volumeLevel || 60;
-    muteBtn.classList.remove("active");
-    localStorage.setItem("isMuted", isMuted);
-localStorage.setItem("volumeLevel", volumeSlider.value);
-  }
-});
-
-let connectedOutput = "Living Room Speaker";
-localStorage.setItem("connectedOutput", connectedOutput);
-
-const shortcuts = document.querySelectorAll(".shortcut-btn");
-const outputText = document.querySelector(".media-output strong");
-shortcuts.forEach(btn => {
-  btn.addEventListener("click", () => {
-
-    // Clear active state
-    shortcuts.forEach(b => b.classList.remove("active"));
-
-    // Set new active
-    btn.classList.add("active");
-
-    // Read source name (Spotify / YouTube / BT)
-    activeSource = btn.dataset.source;
-
-    // (Optional) update now playing text
-    trackInfo.textContent = `${activeSource.toUpperCase()} · Ready`;
-
-  });
-});
-function updateOutput() {
-  const outputText = document.querySelector(".media-output strong");
-  outputText.textContent = connectedOutput;
-}
-updateOutput();
-
-function restoreMediaState() {
-  // Play state
-  const savedPlaying = localStorage.getItem("isPlaying");
-  if (savedPlaying !== null) {
-    isPlaying = savedPlaying === "true";
-    playBtn.classList.toggle("paused", isPlaying);
-    playStatus.textContent = isPlaying ? "Playing" : "Not Playing";
+  function windDir(deg) {
+    if (typeof deg !== "number" || isNaN(deg)) return "";
+    var dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return dirs[Math.round(deg / 45) % 8];
   }
 
-  // Volume
-  const savedVolume = localStorage.getItem("volumeLevel");
-  if (savedVolume !== null) {
-    volumeLevel = savedVolume;
-    volumeSlider.value = savedVolume;
+  function owmUrl(kind) {
+    return "https://api.openweathermap.org/data/2.5/" + kind +
+      "?zip=" + encodeURIComponent(CFG.ZIP) + ",US&units=imperial&appid=" + encodeURIComponent(CFG.WEATHER_API_KEY);
   }
 
-  // Mute
-  const savedMuted = localStorage.getItem("isMuted");
-  if (savedMuted === "true") {
-    isMuted = true;
-    volumeSlider.value = 0;
-    muteBtn.classList.add("active");
+  function precipOf(f) {
+    return ((f.rain && f.rain["3h"]) || 0) + ((f.snow && f.snow["3h"]) || 0);
   }
 
-  // Active source
-  const savedSource = localStorage.getItem("activeSource");
-  if (savedSource) {
-    activeSource = savedSource;
-    shortcuts.forEach(btn => {
-      btn.classList.toggle(
-        "active",
-        btn.dataset.source === savedSource
-      );
+  function makeTile(cls, label, main, sub) {
+    var box = document.createElement("div");
+    box.className = cls;
+    var a = document.createElement("div"); a.textContent = label;
+    var b = document.createElement("div"); b.style.fontWeight = "600"; b.textContent = main;
+    var c = document.createElement("div"); c.style.fontSize = "12px"; c.style.opacity = "0.7"; c.textContent = sub;
+    box.appendChild(a); box.appendChild(b); box.appendChild(c);
+    return box;
+  }
+
+  function renderCurrent(current) {
+    var main = current.main || {};
+    var wind = current.wind || {};
+    var sys = current.sys || {};
+    var temp = Math.round(main.temp) + "°";
+    var feels = "Feels like " + Math.round(main.feels_like) + "°";
+    var desc = (current.weather && current.weather[0] && current.weather[0].description) || "";
+    var humidity = main.humidity !== undefined ? main.humidity + "%" : "--";
+    var speed = wind.speed !== undefined ? Math.round(wind.speed) + " mph" : "--";
+    var vis = typeof current.visibility === "number" ? (current.visibility / 1609).toFixed(1) + " mi" : "--";
+
+    setText("home-temp", temp);
+    setText("home-desc", desc);
+    setText("home-feels", feels);
+    setText("home-humidity", humidity);
+    setText("home-wind", speed);
+    setText("home-visibility", vis);
+    setText("home-sunrise", sys.sunrise ? fmtTime(new Date(sys.sunrise * 1000)) : "--");
+    setText("home-sunset", sys.sunset ? fmtTime(new Date(sys.sunset * 1000)) : "--");
+
+    setText("weather-temp", temp);
+    setText("weather-desc", desc);
+    setText("weather-feels", feels);
+    setText("weather-humidity", humidity);
+    var dir = windDir(wind.deg);
+    setText("weather-wind", (dir ? dir + " " : "") + speed);
+    setText("weather-visibility", vis);
+  }
+
+  function renderForecast(forecast) {
+    var list = (forecast && forecast.list) || [];
+    var hourly = $("hourly");
+    var daily = $("daily");
+
+    if (hourly) {
+      var hf = document.createDocumentFragment();
+      list.slice(0, 8).forEach(function (f) {
+        var time = new Date(f.dt * 1000).toLocaleString("en-US", { hour: "numeric", hour12: true });
+        var percent = Math.round((f.pop || 0) * 100);
+        var total = precipOf(f) / 25.4;
+        var precip = total >= 0.005 ? total.toFixed(2) + '" · ' + percent + "%" : (percent > 0 ? percent + "%" : "Dry");
+        hf.appendChild(makeTile("hour", time, Math.round(f.main.temp) + "°", precip));
+      });
+      hourly.innerHTML = "";
+      hourly.appendChild(hf);
+    }
+
+    if (daily) {
+      var days = [];
+      var byKey = {};
+      list.forEach(function (f) {
+        var d = new Date(f.dt * 1000);
+        var k = dayKey(d);
+        if (!byKey[k]) { byKey[k] = { date: d, temps: [], precip: 0, pop: 0 }; days.push(byKey[k]); }
+        byKey[k].temps.push(f.main.temp);
+        byKey[k].precip += precipOf(f);
+        byKey[k].pop = Math.max(byKey[k].pop, f.pop || 0);
+      });
+      var df = document.createDocumentFragment();
+      days.slice(0, 6).forEach(function (d) {
+        var hi = Math.round(Math.max.apply(null, d.temps));
+        var lo = Math.round(Math.min.apply(null, d.temps));
+        var label = d.date.toLocaleDateString([], { weekday: "short" });
+        df.appendChild(makeTile("day", label, hi + "° / " + lo + "°",
+          (d.precip / 25.4).toFixed(2) + '" · ' + Math.round(d.pop * 100) + "%"));
+      });
+      daily.innerHTML = "";
+      daily.appendChild(df);
+    }
+  }
+
+  function weatherFailed(msg) {
+    // Keep showing the last good reading; only show the error if we have none.
+    if (!weatherLoaded) {
+      setText("home-desc", msg);
+      setText("weather-desc", msg);
+    }
+  }
+
+  var weatherTask = makeTask("Weather", function (done) {
+    if (!CFG.WEATHER_API_KEY || !CFG.ZIP) { weatherFailed("Weather not configured"); return done(true); }
+    getJSON(owmUrl("weather"), function (err, current) {
+      if (err || !current || !current.main) {
+        if (window.console) console.error("Weather failed:", err);
+        weatherFailed("Weather unavailable");
+        return done(false);
+      }
+      renderCurrent(current);
+      weatherLoaded = true;
+      getJSON(owmUrl("forecast"), function (err2, forecast) {
+        if (err2 || !forecast || !forecast.list) {
+          if (window.console) console.error("Forecast failed:", err2);
+          return done(false);
+        }
+        renderForecast(forecast);
+        done(true);
+      });
+    });
+  }, 10 * 60 * 1000);
+
+  /* ===== CALENDAR ===== */
+  var HOLIDAY_CAL = "en.usa#holiday@group.v.calendar.google.com";
+  var HOLIDAY_RE = /Day|Birthday|Holiday|Christmas|Thanksgiving|Halloween|Easter|New Year/i;
+  var calEvents = [];
+  var calLoaded = false;
+
+  function parseDate(part, isEnd) {
+    if (!part) return null;
+    if (part.dateTime) return new Date(part.dateTime);
+    if (part.date) {
+      var p = part.date.split("-");
+      var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      // All-day end dates are exclusive in Google Calendar.
+      if (isEnd) d = new Date(d.getTime() - 1);
+      return d;
+    }
+    return null;
+  }
+  function parseEventDate(ev) { return parseDate(ev.start, false); }
+  function parseEventEnd(ev) {
+    var e = parseDate(ev.end, true);
+    var s = parseEventDate(ev);
+    if (!e || !s || e < s) return s;
+    // Timed event ending exactly at midnight shouldn't spill into the next day.
+    if (ev.end && ev.end.dateTime && e.getTime() > s.getTime()) e = new Date(e.getTime() - 1);
+    return e;
+  }
+
+  function isHolidayEvent(ev) { return ev._holiday || HOLIDAY_RE.test(ev.summary || ""); }
+
+  function calUrl(calId, start, end) {
+    return "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) +
+      "/events?key=" + encodeURIComponent(CFG.CAL_API_KEY) +
+      "&timeMin=" + encodeURIComponent(start) + "&timeMax=" + encodeURIComponent(end) +
+      "&singleEvents=true&orderBy=startTime&maxResults=250";
+  }
+
+  var calendarTask = makeTask("Calendar", function (done) {
+    if (!CFG.CAL_API_KEY || !CFG.CAL_ID) { renderCalendarAll(); return done(true); }
+    var now = new Date();
+    var start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    var end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+    var pending = 2, mainItems = null, holidayItems = null, mainErr = null;
+    function oneDone() {
+      if (--pending > 0) return;
+      if (mainItems === null && holidayItems === null) {
+        if (window.console) console.error("Calendar failed:", mainErr);
+        if (!calLoaded) setText("today-date", now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
+        if (!calLoaded && $("today-events")) $("today-events").innerHTML = '<div style="opacity:0.6">Calendar unavailable</div>';
+        return done(false);
+      }
+      var all = (mainItems || []).concat(holidayItems || []);
+      all.sort(function (a, b) {
+        var da = parseEventDate(a), db = parseEventDate(b);
+        return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+      });
+      calEvents = all;
+      calLoaded = true;
+      renderCalendarAll();
+      // If one of the two calendars failed, retry sooner.
+      done(mainItems !== null && holidayItems !== null);
+    }
+
+    getJSON(calUrl(CFG.CAL_ID, start, end), function (err, data) {
+      if (err || !data) { mainErr = err; } else { mainItems = data.items || []; }
+      oneDone();
+    });
+    getJSON(calUrl(HOLIDAY_CAL, start, end), function (err, data) {
+      if (err || !data) {
+        if (window.console) console.warn("Holiday calendar failed:", err);
+      } else {
+        holidayItems = (data.items || []).map(function (ev) { ev._holiday = true; return ev; });
+      }
+      oneDone();
+    });
+  }, 15 * 60 * 1000);
+
+  function renderCalendarAll() {
+    renderCalendar(calEvents);
+    renderToday(calEvents);
+  }
+
+  function renderCalendar(events) {
+    var grid = $("calendar-grid");
+    if (!grid) return;
+
+    var now = new Date();
+    var year = now.getFullYear();
+    var month = now.getMonth();
+    var firstDay = new Date(year, month, 1).getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var monthStart = new Date(year, month, 1);
+    var monthEnd = new Date(year, month, daysInMonth, 23, 59, 59, 999);
+
+    // Map each event onto every day it covers within this month
+    // (multi-day events show on each day; events from other months don't leak in).
+    var eventMap = {};
+    events.forEach(function (ev) {
+      var s = parseEventDate(ev);
+      var e = parseEventEnd(ev);
+      if (!s) return;
+      if (e < monthStart || s > monthEnd) return;
+      var d = new Date(Math.max(s.getTime(), monthStart.getTime()));
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      var guard = 0;
+      while (d <= e && d <= monthEnd && guard++ < 32) {
+        var day = d.getDate();
+        if (!eventMap[day]) eventMap[day] = [];
+        eventMap[day].push(ev);
+        d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+      }
+    });
+
+    var frag = document.createDocumentFragment();
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach(function (name) {
+      var h = document.createElement("div");
+      h.className = "cal-day-header";
+      h.textContent = name;
+      frag.appendChild(h);
+    });
+
+    for (var i = 0; i < firstDay; i++) {
+      var empty = document.createElement("div");
+      empty.className = "cal-day empty";
+      frag.appendChild(empty);
+    }
+
+    var today = now.getDate();
+    for (var day = 1; day <= daysInMonth; day++) {
+      var cell = document.createElement("div");
+      cell.className = "cal-day" + (day === today ? " today" : "");
+      var dateLabel = document.createElement("div");
+      dateLabel.className = "cal-date";
+      dateLabel.textContent = day;
+      cell.appendChild(dateLabel);
+
+      (eventMap[day] || []).forEach(function (ev) {
+        var evDiv = document.createElement("div");
+        evDiv.className = "cal-event" + (isHolidayEvent(ev) ? " holiday" : "");
+        evDiv.textContent = ev.summary || "Untitled";
+        cell.appendChild(evDiv);
+      });
+      frag.appendChild(cell);
+    }
+
+    grid.innerHTML = "";
+    grid.appendChild(frag);
+  }
+
+  function renderToday(events) {
+    var container = $("today-events");
+    var dateEl = $("today-date");
+    if (!container || !dateEl) return;
+
+    var now = new Date();
+    dateEl.textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+
+    var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    var todays = events.filter(function (ev) {
+      var s = parseEventDate(ev), e = parseEventEnd(ev);
+      return s && s <= dayEnd && e >= dayStart;
+    });
+
+    container.innerHTML = "";
+    if (!todays.length) {
+      container.innerHTML = '<div style="opacity:0.6">' + (calLoaded || !CFG.CAL_API_KEY ? "No events today" : "Loading…") + "</div>";
+      return;
+    }
+
+    todays.forEach(function (ev) {
+      var div = document.createElement("div");
+      div.className = "today-event" + (isHolidayEvent(ev) ? " holiday" : "");
+      div.textContent = ev.summary || "Untitled";
+      container.appendChild(div);
     });
   }
 
-  // Output device
-  const savedOutput = localStorage.getItem("connectedOutput");
-  if (savedOutput) {
-    connectedOutput = savedOutput;
-    updateOutput();
-  }
-}
-restoreMediaState();
-
-/**********************
- * GOOGLE CALENDAR – PUBLIC FEED
- **********************/
-
-const CAL_API_KEY = "AIzaSyBebis1wlON9Tg7JZjB-BI2rLaaPut3OVI";
-const CAL_ID = "orioncorey15@gmail.com";
-
-function parseEventDate(ev) {
-  if (ev.start.dateTime) {
-    return new Date(ev.start.dateTime);
+  /* ===== PHOTOS / DRIVE ===== */
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
   }
 
-  if (ev.start.date) {
-    const parts = ev.start.date.split("-");
-    return new Date(
-      parseInt(parts[0]),
-      parseInt(parts[1]) - 1,
-      parseInt(parts[2])
-    );
+  // Ask Google for images sized to the screen instead of always 1920px:
+  // much less decoding work / memory on an old tablet.
+  function photoSize(forHome) {
+    var dpr = window.devicePixelRatio || 1;
+    var px = Math.max(window.screen.width || 1280, window.screen.height || 800) * dpr;
+    if (forHome) px = px * 0.5;
+    return Math.max(640, Math.min(1920, Math.round(px)));
+  }
+  function photoUrl(id, forHome) {
+    return "https://lh3.googleusercontent.com/d/" + id + "=s" + photoSize(forHome);
   }
 
-  return null;
-}
+  /*
+   * One timer drives whichever slideshow is on screen. Nothing loads while
+   * the other pages are showing or the screen is off, and a broken image is
+   * skipped instead of leaving a blank frame.
+   */
+  var slideshow = (function () {
+    var ids = [];
+    var timer = null;
+    var fadeTimer = null;
+    var homeImg = $("home-slideshow-img");
+    var frameImg = $("photo-frame-img");
+    var state = { home: { idx: 0, shown: -1, errors: 0 }, photos: { idx: 0, shown: -1, errors: 0 } };
 
-/* ---------- FETCH EVENTS ---------- */
-async function listEvents() {
-  try {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    function imgFor(page) { return page === "home" ? homeImg : (page === "photos" ? frameImg : null); }
 
-    const range =
-      `&timeMin=${startOfMonth.toISOString()}` +
-      `&timeMax=${endOfMonth.toISOString()}` +
-      `&singleEvents=true&orderBy=startTime`;
+    function show(page, idx) {
+      var img = imgFor(page);
+      if (!img || !ids.length) return;
+      var s = state[page];
+      s.idx = idx % ids.length;
+      s.shown = s.idx;
+      var url = photoUrl(ids[s.idx], page === "home");
+      if (page === "home") {
+        img.style.opacity = "0";
+        clearTimeout(fadeTimer);
+        fadeTimer = setTimeout(function () {
+          if (img.src === url) img.style.opacity = "1"; else img.src = url;
+        }, 400);
+      } else {
+        img.src = url;
+      }
+    }
 
-    const mainUrl =
-      `https://www.googleapis.com/calendar/v3/calendars/${CAL_ID}/events?key=${CAL_API_KEY}${range}`;
+    function handleLoad(page) {
+      return function () {
+        state[page].errors = 0;
+        if (page === "home") homeImg.style.opacity = "1";
+      };
+    }
+    function handleError(page) {
+      return function () {
+        var s = state[page];
+        if (!ids.length || !imgFor(page).getAttribute("src")) return;
+        s.errors++;
+        if (window.console) console.warn("Photo failed to load, skipping");
+        if (s.errors < Math.min(ids.length, 5)) show(page, s.idx + 1); // otherwise wait for next tick
+      };
+    }
+    if (homeImg) { homeImg.onload = handleLoad("home"); homeImg.onerror = handleError("home"); }
+    if (frameImg) { frameImg.onload = handleLoad("photos"); frameImg.onerror = handleError("photos"); }
 
-    const holidayUrl =
-      `https://www.googleapis.com/calendar/v3/calendars/en.usa%23holiday@group.v.calendar.google.com/events?key=${CAL_API_KEY}${range}`;
+    function schedule() {
+      clearTimeout(timer);
+      timer = null;
+      if (!ids.length || isHidden() || !imgFor(currentPage)) return;
+      timer = setTimeout(function () {
+        var s = state[currentPage];
+        if (s) { s.errors = 0; show(currentPage, s.idx + 1); }
+        schedule();
+      }, SLIDE_MS);
+    }
 
-    const [mainRes, holidayRes] = await Promise.all([
-      fetch(mainUrl),
-      fetch(holidayUrl)
-    ]);
+    function onPageChange() {
+      var s = state[currentPage];
+      if (s && ids.length && s.shown === -1) show(currentPage, s.idx);
+      schedule();
+    }
 
-    const mainData = await mainRes.json();
-    const holidayData = await holidayRes.json();
+    function setList(newIds) {
+      var same = newIds.length === ids.length && newIds.slice().sort().join() === ids.slice().sort().join();
+      if (same) return;
+      ids = shuffle(newIds.slice());
+      state.home = { idx: 0, shown: -1, errors: 0 };
+      state.photos = { idx: 0, shown: -1, errors: 0 };
+      onPageChange();
+    }
 
-    const allEvents = [
-      ...(mainData.items || []),
-      ...(holidayData.items || [])
-    ];
+    return { setList: setList, onPageChange: onPageChange, schedule: schedule };
+  })();
 
-    renderCalendar(allEvents);
-    renderToday(allEvents);
-
-  } catch (e) {
-    console.log("Calendar fetch failed:", e);
+  function driveUrl(pageToken) {
+    var q = "'" + CFG.DRIVE_FOLDER_ID + "' in parents and trashed = false";
+    return "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+      "&key=" + encodeURIComponent(CFG.DRIVE_API_KEY) +
+      "&pageSize=1000&fields=" + encodeURIComponent("nextPageToken,files(id,mimeType)") +
+      (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
   }
-}
 
-/* ---------- MONTH RENDER ---------- */
-function renderCalendar(events) {
-  const grid = document.getElementById("calendar-grid");
-  if (!grid) return;
-
-  grid.innerHTML = "";
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  daysOfWeek.forEach(day => {
-    const header = document.createElement("div");
-    header.className = "cal-day-header";
-    header.textContent = day;
-    grid.appendChild(header);
-  });
-
-  const eventMap = {};
-  events.forEach(ev => {
-  const date = parseEventDate(ev);
-  if (!date) return;
-
-  const day = date.getDate();
-    if (!eventMap[day]) eventMap[day] = [];
-    eventMap[day].push(ev.summary || "Untitled");
-  });
-
-  for (let i = 0; i < firstDayOfMonth; i++) {
-    const emptyCell = document.createElement("div");
-    emptyCell.className = "cal-day empty";
-    grid.appendChild(emptyCell);
-  }
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const cell = document.createElement("div");
-    cell.className = "cal-day";
-
-    const dateLabel = document.createElement("div");
-    dateLabel.className = "cal-date";
-    dateLabel.textContent = day;
-    cell.appendChild(dateLabel);
-
-    if (eventMap[day]) {
-      eventMap[day].forEach(title => {
-        const evDiv = document.createElement("div");
-        evDiv.className = "cal-event";
-
-        const holidayKeywords = [
-          "Day","Birthday","Holiday",
-          "Christmas","Thanksgiving",
-          "Halloween","Easter","New Year"
-        ];
-
-        if (holidayKeywords.some(k => title.includes(k))) {
-          evDiv.style.background = "#2e7d32";
-          evDiv.style.boxShadow = "0 0 8px rgba(46,125,50,0.6)";
+  var photosTask = makeTask("Drive photos", function (done) {
+    if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) return done(true);
+    var found = [];
+    var pages = 0;
+    (function fetchPage(token) {
+      getJSON(driveUrl(token), function (err, data) {
+        if (err || !data) {
+          if (window.console) console.error("Drive photo load failed:", err);
+          return done(false);
         }
+        (data.files || []).forEach(function (f) {
+          if (f.mimeType && f.mimeType.indexOf("image/") === 0) found.push(f.id);
+        });
+        if (data.nextPageToken && ++pages < 10) return fetchPage(data.nextPageToken);
+        if (found.length) slideshow.setList(found);
+        done(true);
+      });
+    })(null);
+  }, 60 * 60 * 1000); // pick up newly added photos hourly
 
-        evDiv.textContent = title;
-        cell.appendChild(evDiv);
+  /* Fullscreen (with old webkit-prefixed fallback) */
+  if ($("fs-btn")) $("fs-btn").addEventListener("click", function () {
+    var el = $("photos");
+    var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    try {
+      if (!fsEl) {
+        var req = el && (el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen);
+        if (req) {
+          var p = req.call(el);
+          if (p && p["catch"]) p["catch"](function () { /* ignore */ });
+        }
+      } else {
+        var exit = document.exitFullscreen || document.webkitExitFullscreen || document.webkitCancelFullScreen;
+        if (exit) {
+          var p2 = exit.call(document);
+          if (p2 && p2["catch"]) p2["catch"](function () { /* ignore */ });
+        }
+      }
+    } catch (e) { /* fullscreen not allowed */ }
+  });
+
+  /* ===== MEDIA (local state only) ===== */
+  var isPlaying = false;
+  var activeSource = "spotify";
+  var volumeLevel = 60;
+  var isMuted = false;
+  var connectedOutput = "Bluetooth Speaker";
+
+  var playBtn = $("play-btn");
+  var playStatus = $("play-status");
+  var trackInfo = $("track-info");
+  var volumeSlider = document.querySelector(".volume-slider");
+  var muteBtn = document.querySelector(".mute-btn");
+  var outputText = document.querySelector(".media-output strong");
+  var homeNowPlaying = $("home-nowplaying-text");
+
+  function updateNowPlaying() {
+    var text = isPlaying ? String(activeSource).toUpperCase() + " · Playing" : "Not Playing";
+    if (playStatus) playStatus.textContent = isPlaying ? "Playing" : "Not Playing";
+    if (trackInfo) trackInfo.textContent = isPlaying ? "Demo Track · Demo Artist" : "Artist · Album";
+    if (homeNowPlaying) homeNowPlaying.textContent = text;
+  }
+
+  if (playBtn) playBtn.addEventListener("click", function () {
+    isPlaying = !isPlaying;
+    toggleClass(playBtn, "paused", isPlaying);
+    store.set("isPlaying", isPlaying);
+    updateNowPlaying();
+  });
+
+  each(document.querySelectorAll(".shortcut-btn"), function (btn) {
+    btn.addEventListener("click", function () {
+      each(document.querySelectorAll(".shortcut-btn"), function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      activeSource = btn.getAttribute("data-source");
+      store.set("activeSource", activeSource);
+      updateNowPlaying();
+    });
+  });
+
+  if (volumeSlider) volumeSlider.addEventListener("input", function () {
+    var v = Number(volumeSlider.value);
+    isMuted = v === 0;
+    if (!isMuted) volumeLevel = v; // remember last non-zero level for un-mute
+    toggleClass(muteBtn, "active", isMuted);
+    store.set("volumeLevel", volumeLevel);
+    store.set("isMuted", isMuted);
+  });
+
+  if (muteBtn) muteBtn.addEventListener("click", function () {
+    isMuted = !isMuted;
+    if (volumeSlider) volumeSlider.value = isMuted ? 0 : (volumeLevel || 60);
+    toggleClass(muteBtn, "active", isMuted);
+    store.set("isMuted", isMuted);
+  });
+
+  function restoreMediaState() {
+    var savedPlaying = store.get("isPlaying");
+    if (savedPlaying !== null) {
+      isPlaying = savedPlaying === "true";
+      toggleClass(playBtn, "paused", isPlaying);
+    }
+    var savedVol = store.get("volumeLevel");
+    if (savedVol !== null && !isNaN(Number(savedVol))) {
+      volumeLevel = Number(savedVol);
+      if (volumeSlider) volumeSlider.value = volumeLevel;
+    }
+    if (store.get("isMuted") === "true") {
+      isMuted = true;
+      if (volumeSlider) volumeSlider.value = 0;
+      toggleClass(muteBtn, "active", true);
+    }
+    var savedSource = store.get("activeSource");
+    if (savedSource) {
+      activeSource = savedSource;
+      each(document.querySelectorAll(".shortcut-btn"), function (btn) {
+        toggleClass(btn, "active", btn.getAttribute("data-source") === savedSource);
       });
     }
-
-    grid.appendChild(cell);
-  }
-  /* ===== HOME TODAY CARD ===== */
-  const todayContainer = document.getElementById("today-events");
-  if (todayContainer) {
-
-    todayContainer.innerHTML = "";
-
-    const today = new Date().getDate();
-
-    if (eventMap[today]) {
-      eventMap[today].forEach(title => {
-        const evDiv = document.createElement("div");
-        evDiv.className = "today-event";
-        evDiv.textContent = title;
-        todayContainer.appendChild(evDiv);
-      });
-    } else {
-      todayContainer.innerHTML =
-        '<div class="no-events">No events today</div>';
+    var savedOutput = store.get("connectedOutput");
+    if (savedOutput && outputText) {
+      connectedOutput = savedOutput;
+      outputText.textContent = connectedOutput;
     }
+    updateNowPlaying();
   }
-}
-function renderToday(events) {
-  const container = document.getElementById("today-events");
-  const dateEl = document.getElementById("today-date");
-  if (!container || !dateEl) return;
+  restoreMediaState();
 
-  container.innerHTML = "";
+  /* ===== RECOVERY ===== */
+  // Back online after a Wi-Fi drop: refresh anything that has gone stale.
+  window.addEventListener("online", function () { refreshStale(60 * 1000); });
 
-  const now = new Date();
-  const todayString = now.toDateString();
-
-  // Set large readable date
-  dateEl.textContent = now.toLocaleDateString([], {
-    weekday: "long",
-    month: "long",
-    day: "numeric"
-  });
-
-  // Filter events for today
-  const todaysEvents = events.filter(ev => {
-   let evDate;
-
-if (ev.start.dateTime) {
-  // Timed event — normal
-  evDate = new Date(ev.start.dateTime);
-} else {
-  // All-day event — parse WITHOUT timezone shift
-  const parts = ev.start.date.split("-");
-  evDate = new Date(
-    parts[0],        // year
-    parts[1] - 1,    // month (0 indexed)
-    parts[2]         // day
-  );
-}
-    return evDate.toDateString() === todayString;
-  });
-
-  if (!todaysEvents.length) {
-    container.innerHTML = `<div style="opacity:0.6;">No events today</div>`;
-    return;
+  // Screen turned back on: resume the slideshow and refresh stale data.
+  function onVisibility() {
+    slideshow.schedule();
+    if (!isHidden()) refreshStale(5 * 60 * 1000);
   }
+  document.addEventListener("visibilitychange", onVisibility);
+  document.addEventListener("webkitvisibilitychange", onVisibility);
 
-  // Holidays first
-  const holidayKeywords = [
-    "Day","Birthday","Holiday",
-    "Christmas","Thanksgiving",
-    "Halloween","Easter","New Year"
-  ];
-
-  todaysEvents.sort((a, b) => {
-    const aHoliday = holidayKeywords.some(k => (a.summary || "").includes(k));
-    const bHoliday = holidayKeywords.some(k => (b.summary || "").includes(k));
-    return bHoliday - aHoliday;
-  });
-
-  todaysEvents.forEach(ev => {
-    const div = document.createElement("div");
-    div.className = "today-event";
-
-    if (holidayKeywords.some(k => (ev.summary || "").includes(k))) {
-      div.classList.add("holiday");
-    }
-
-    div.textContent = ev.summary || "Untitled";
-    container.appendChild(div);
-  });
-}
-
-
-/* ---------- INIT ---------- */
-window.addEventListener("load", () => {
-  listEvents();
-});
-
-/**********************
- * GOOGLE DRIVE PHOTO FRAME
- **********************/
-
-const DRIVE_API_KEY = "AIzaSyAUpJiY2rZmrRhXXPEaWK8E6BqXn9scnD8";
-const DRIVE_FOLDER_ID = "17YV1RzRT3xCGqIKg5A6UrgoUyGhEMGEv";
-
-let photoList = [];
-let photoIndex = 0;
-let slideshowInterval = null;
-
-/* SHUFFLE */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-}
-
-/* LOAD PHOTOS */
-async function loadDrivePhotos() {
-  try {
-    const url =
-      `https://www.googleapis.com/drive/v3/files` +
-      `?q='${DRIVE_FOLDER_ID}'+in+parents` +
-      `&key=${DRIVE_API_KEY}` +
-      `&fields=files(id,mimeType)`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    photoList = (data.files || [])
-      .filter(f => f.mimeType && f.mimeType.startsWith("image/"))
-      .map(f => `https://lh3.googleusercontent.com/d/${f.id}=s1920`);
-
-    console.log("PHOTO LIST:", photoList);
-
-    if (!photoList.length) return;
-
-    shuffle(photoList);
-
-    startSlideshow();
-    startHomeSlideshow();
-
-  } catch (e) {
-    console.error("Drive photo load failed:", e);
-  }
-}
-
-/* SLIDESHOW */
-function startSlideshow() {
-  const img = document.getElementById("photo-frame-img");
-  if (!img || !photoList.length) return;
-
-  img.src = photoList[0]; // show first immediately
-  img.onload = () => {
-  if (img.naturalHeight > img.naturalWidth) {
-    // Portrait
-    img.style.objectFit = "contain";
-  } else {
-    // Landscape
-    img.style.objectFit = "cover";
-  }
-};
-
-  img.onerror = () => console.log("FAILED:", img.src);
-
-if (slideshowInterval) {
-  clearInterval(slideshowInterval);
-}
-
-slideshowInterval = setInterval(() => {
-  photoIndex = (photoIndex + 1) % photoList.length;
-  img.src = photoList[photoIndex];
-}, 8000);
-}
-
-let homeSlideshowInterval = null;
-let homeIndex = 0;
-
-function startHomeSlideshow() {
-  const img = document.getElementById("home-slideshow-img");
-  if (!img || !photoList.length) return;
-
-  homeIndex = 0;
-  img.src = photoList[0];
-
-  img.onload = () => {
-    img.style.opacity = "1";
-  };
-
-  if (homeSlideshowInterval) {
-    clearInterval(homeSlideshowInterval);
-  }
-
-  homeSlideshowInterval = setInterval(() => {
-    homeIndex = (homeIndex + 1) % photoList.length;
-
-    img.style.opacity = "0";
-
-    setTimeout(() => {
-      img.src = photoList[homeIndex];
-    }, 400);
-  }, 8000);
-}
-/**********************
- * FULLSCREEN � PHOTOS ONLY
- **********************/
-window.addEventListener("load", () => {
-
-  const fsBtn = document.getElementById("fs-btn");
-  const photosPage = document.getElementById("photos");
-
-  if (!fsBtn || !photosPage) return;
-
-  fsBtn.addEventListener("click", () => {
-    if (!document.fullscreenElement) {
-      photosPage.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  });
-
-  // Auto-hide button
-  let hideTimer;
-
-  function showFsBtn() {
-    fsBtn.style.opacity = "1";
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      fsBtn.style.opacity = "0";
-    }, 3000);
-  }
-
-  photosPage.addEventListener("mousemove", showFsBtn);
-  showFsBtn();
-});
-// Ensure correct page state on first load
-window.addEventListener("load", () => {
-  const activePage = document.querySelector(".page.active");
-  if (activePage) {
-    document.body.classList.toggle(
-      "home-active",
-      activePage.id === "home"
-    );
-  }
-});
-
-window.toggleSidebar = function () {
-  if (document.body.classList.contains("home-active")) {
-    document.getElementById("sidebar").classList.toggle("open");
-  }
-};
-
-// GLOBAL sidebar toggle
-window.toggleSidebar = function () {
-  const sidebar = document.getElementById("sidebar");
-  if (!sidebar) return;
-
-  if (document.body.classList.contains("home-active")) {
-    sidebar.classList.toggle("open");
-  }
-};
-window.addEventListener("load", () => {
-    loadDrivePhotos();
-});
+  /* ===== INIT ===== */
+  showPage("home");
+  renderCalendarAll();
+  weatherTask.run();
+  calendarTask.run();
+  photosTask.run();
+})();
