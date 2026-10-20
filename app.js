@@ -13,6 +13,10 @@
   // "drive" (default) = public Google Drive folder; "local" = photos/ folder next to index.html
   var PHOTO_SOURCE = String(CFG.PHOTO_SOURCE || "drive").toLowerCase() === "local" ? "local" : "drive";
   var IS_FILE = window.location.protocol === "file:";
+  // Data comes from our own Netlify Functions (they hold the API keys), never straight from the APIs.
+  var API_BASE = String(CFG.API_BASE || "/api/");
+  if (API_BASE.charAt(API_BASE.length - 1) !== "/") API_BASE += "/";
+  function apiUrl(path) { return API_BASE + path; }
 
   /* ===== HELPERS ===== */
   function $(id) { return document.getElementById(id); }
@@ -45,7 +49,9 @@
   function dayKey(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
 
   /*
-   * GET a JSON URL with a timeout. cb(err, data) is called exactly once.
+   * GET a JSON URL with a timeout. cb(err, data, meta) is called exactly once.
+   * meta.offline is true when the service worker answered from its cache
+   * because the network was down (the data is the last saved copy).
    * Uses XMLHttpRequest because it works on every old browser.
    */
   function getJSON(url, cb) {
@@ -55,7 +61,9 @@
       if (done) return;
       done = true;
       xhr.onload = xhr.onerror = xhr.ontimeout = xhr.onabort = null;
-      cb(err, data);
+      var offline = false;
+      try { offline = xhr.getResponseHeader("X-Dashboard-Offline") === "1"; } catch (e) { /* ignore */ }
+      cb(err, data, { offline: offline });
     }
     try {
       xhr.open("GET", url, true);
@@ -293,8 +301,7 @@
   }
 
   function owmUrl(kind) {
-    return "https://api.openweathermap.org/data/2.5/" + kind +
-      "?zip=" + encodeURIComponent(CFG.ZIP) + ",US&units=imperial&appid=" + encodeURIComponent(CFG.WEATHER_API_KEY);
+    return apiUrl("weather?kind=" + (kind === "weather" ? "current" : kind));
   }
 
   function precipOf(f) {
@@ -391,8 +398,7 @@
   }
 
   var weatherTask = makeTask("Weather", function (done) {
-    if (!CFG.WEATHER_API_KEY || !CFG.ZIP) { weatherFailed("Weather not configured"); return done(true); }
-    getJSON(owmUrl("weather"), function (err, current) {
+    getJSON(owmUrl("weather"), function (err, current, meta) {
       if (err || !current || !current.main) {
         if (window.console) console.error("Weather failed:", err);
         weatherFailed("Weather unavailable");
@@ -406,13 +412,13 @@
           return done(false);
         }
         renderForecast(forecast);
-        done(true);
+        done(!meta.offline); // cached copy while offline: keep retrying
+
       });
     });
   }, 10 * 60 * 1000);
 
   /* ===== CALENDAR ===== */
-  var HOLIDAY_CAL = "en.usa#holiday@group.v.calendar.google.com";
   var HOLIDAY_RE = /Day|Birthday|Holiday|Christmas|Thanksgiving|Halloween|Easter|New Year/i;
   var calEvents = [];
   var calLoaded = false;
@@ -441,20 +447,16 @@
 
   function isHolidayEvent(ev) { return ev._holiday || HOLIDAY_RE.test(ev.summary || ""); }
 
-  function calUrl(calId, start, end) {
-    return "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) +
-      "/events?key=" + encodeURIComponent(CFG.CAL_API_KEY) +
-      "&timeMin=" + encodeURIComponent(start) + "&timeMax=" + encodeURIComponent(end) +
-      "&singleEvents=true&orderBy=startTime&maxResults=250";
+  function calUrl(which, start, end) {
+    return apiUrl("calendar?which=" + which + "&timeMin=" + encodeURIComponent(start) + "&timeMax=" + encodeURIComponent(end));
   }
 
   var calendarTask = makeTask("Calendar", function (done) {
-    if (!CFG.CAL_API_KEY || !CFG.CAL_ID) { renderCalendarAll(); return done(true); }
     var now = new Date();
     var start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     var end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    var pending = 2, mainItems = null, holidayItems = null, mainErr = null;
+    var pending = 2, mainItems = null, holidayItems = null, mainErr = null, offline = false;
     function oneDone() {
       if (--pending > 0) return;
       if (mainItems === null && holidayItems === null) {
@@ -472,14 +474,14 @@
       calLoaded = true;
       renderCalendarAll();
       // If one of the two calendars failed, retry sooner.
-      done(mainItems !== null && holidayItems !== null);
+      done(mainItems !== null && holidayItems !== null && !offline);
     }
 
-    getJSON(calUrl(CFG.CAL_ID, start, end), function (err, data) {
-      if (err || !data) { mainErr = err; } else { mainItems = data.items || []; }
+    getJSON(calUrl("main", start, end), function (err, data, meta) {
+      if (err || !data) { mainErr = err; } else { mainItems = data.items || []; if (meta.offline) offline = true; }
       oneDone();
     });
-    getJSON(calUrl(HOLIDAY_CAL, start, end), function (err, data) {
+    getJSON(calUrl("holiday", start, end), function (err, data) {
       if (err || !data) {
         if (window.console) console.warn("Holiday calendar failed:", err);
       } else {
@@ -590,7 +592,7 @@
 
     container.innerHTML = "";
     if (!todays.length) {
-      container.innerHTML = '<div style="opacity:0.6">' + (calLoaded || !CFG.CAL_API_KEY ? "No events today" : "Loading…") + "</div>";
+      container.innerHTML = '<div style="opacity:0.6">' + (calLoaded ? "No events today" : "Loading…") + "</div>";
       return;
     }
 
@@ -743,13 +745,8 @@
     return { setList: setList, onPageChange: onPageChange, schedule: schedule, hasPhotos: hasPhotos };
   })();
 
-  function driveUrl(pageToken) {
-    var q = "'" + CFG.DRIVE_FOLDER_ID + "' in parents and trashed = false";
-    return "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
-      "&key=" + encodeURIComponent(CFG.DRIVE_API_KEY) +
-      "&pageSize=1000&fields=" + encodeURIComponent("nextPageToken,files(id,mimeType)") +
-      (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
-  }
+  // The photos function returns every image in the shared Drive folder (all pages).
+  function driveUrl() { return apiUrl("photos"); }
 
   // Remember the last Drive photo list so the slideshow can start even if the
   // tablet boots without Wi-Fi (already-viewed photos come from the cache).
@@ -758,30 +755,26 @@
   }
 
   function loadDrivePhotos(done) {
-    if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) {
-      slideshow.setList([], "Set DRIVE_API_KEY and DRIVE_FOLDER_ID in config.js.");
-      return done(true);
-    }
-    var found = [];
-    var pages = 0;
-    (function fetchPage(token) {
-      getJSON(driveUrl(token), function (err, data) {
-        if (err || !data) {
-          if (window.console) console.error("Drive photo load failed:", err);
-          var cached = cachedDriveList();
-          if (cached) slideshow.setList(cached);
-          else if (!slideshow.hasPhotos()) slideshow.setList([], "Couldn't reach Google Drive. Will try again shortly.");
-          return done(false);
+    getJSON(driveUrl(), function (err, data, meta) {
+      if (err || !data) {
+        if (window.console) console.error("Drive photo load failed:", err);
+        var cached = cachedDriveList();
+        if (cached) slideshow.setList(cached);
+        else if (!slideshow.hasPhotos()) {
+          var notSetUp = err && /HTTP 503/.test(err.message);
+          slideshow.setList([], notSetUp ? "Photos aren't set up yet (Netlify GOOGLE_DRIVE_FOLDER_ID)." :
+            "Couldn't reach Google Drive. Will try again shortly.");
         }
-        (data.files || []).forEach(function (f) {
-          if (f.mimeType && f.mimeType.indexOf("image/") === 0) found.push(f.id);
-        });
-        if (data.nextPageToken && ++pages < 10) return fetchPage(data.nextPageToken);
-        slideshow.setList(found, "Add photos to your Google Drive photo folder.");
-        store.set("drivePhotoIds", JSON.stringify(found));
-        done(true);
+        return done(false);
+      }
+      var found = [];
+      (data.files || []).forEach(function (f) {
+        if (f.mimeType && f.mimeType.indexOf("image/") === 0) found.push(f.id);
       });
-    })(null);
+      slideshow.setList(found, "Add photos to your Google Drive photo folder.");
+      store.set("drivePhotoIds", JSON.stringify(found));
+      done(!meta.offline);
+    });
   }
 
   /*

@@ -1,0 +1,26 @@
+# Netlify: static site + small serverless functions that hold the API keys.
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Spotify sends you back here after "Connect Spotify"; the app handles it.
+[[redirects]]
+  from = "/spotify-callback"
+  to = "/index.html"
+  status = 200
+
+# Service worker must always be re-checked so updates roll out.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

@@ -1,5 +1,8 @@
-# Real keys/settings live only on the tablet (copy config.example.js -> config.js)
-config.js
+# Secrets never go in the repo: use Netlify environment variables
+.env
+.env.*
+.netlify/
+node_modules/
 
 # Personal photos and the generated list stay out of the repo
 photos/*
