@@ -103,6 +103,7 @@
 
       <!-- CALENDAR -->
       <section class="page" id="calendar">
+        <h2 id="cal-title" class="cal-title"></h2>
         <div id="calendar-grid" class="calendar-grid"></div>
       </section>
 
@@ -126,6 +127,7 @@
           </div>
         </div>
         <div class="weather-bottom">
+          <div id="forecast-note" class="forecast-note"></div>
           <h2>24 Hours</h2>
           <div id="hourly" class="hourly-row"></div>
           <h2>5 Day</h2>
@@ -238,6 +240,20 @@
         <div class="photo-empty" id="photo-frame-empty"></div>
       </section>
     </main>
+  </div>
+
+  <!-- Offline / stale-data notice (filled in by app.js) -->
+  <div id="status-badge" class="status-badge" role="status" aria-live="polite"></div>
+
+  <!-- Calendar day details (opened by tapping a day) -->
+  <div id="day-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="day-modal-title">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="day-modal-title"></h2>
+        <button id="day-modal-close" class="modal-close" aria-label="Close">Close</button>
+      </div>
+      <div id="day-modal-list" class="modal-list"></div>
+    </div>
   </div>
 
   <script src="config.js"></script>

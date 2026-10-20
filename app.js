@@ -157,6 +157,7 @@
 
     toggleClass(document.body, "home-active", pageId === "home");
     toggleClass($("sidebar"), "open", false); // any nav tap (incl. Home) closes the slide-out menu
+    closeDayModal();
 
     var fsBtn = $("fs-btn");
     if (fsBtn) fsBtn.style.display = (pageId === "photos" && FS_SUPPORTED) ? "block" : "none";
@@ -249,7 +250,9 @@
   // The button always works; the schedule re-applies at the next start/end time.
   var nightBtn = $("night-toggle");
   function validHour(h) { return typeof h === "number" && h >= 0 && h <= 23 && Math.floor(h) === h; }
-  var NIGHT_START = CFG.NIGHT_MODE_START, NIGHT_END = CFG.NIGHT_MODE_END;
+  // Missing keys (e.g. a config.js made before this setting existed) use the documented 22 / 6 default.
+  var NIGHT_START = CFG.NIGHT_MODE_START === undefined ? 22 : CFG.NIGHT_MODE_START;
+  var NIGHT_END = CFG.NIGHT_MODE_END === undefined ? 6 : CFG.NIGHT_MODE_END;
   var NIGHT_SCHEDULED = validHour(NIGHT_START) && validHour(NIGHT_END) && NIGHT_START !== NIGHT_END;
 
   function isNightHour(h) {
@@ -401,12 +404,28 @@
     }
   }
 
+  // Forecast failed: say so instead of leaving the hourly/daily rows blank
+  // (or silently showing an old forecast).
+  var forecastAt = 0;
+  function forecastNote(failed) {
+    var note = $("forecast-note");
+    if (!note) return;
+    var text = "";
+    if (failed) {
+      text = forecastAt ? "Forecast couldn't refresh - showing earlier data from " + fmtTime(new Date(forecastAt)) :
+        "Forecast unavailable - retrying automatically";
+    }
+    setText("forecast-note", text);
+    toggleClass(note, "show", !!text);
+  }
+
   var weatherTask = makeTask("Weather", function (done) {
     getJSON(owmUrl("weather"), function (err, current, meta) {
       weatherNotConfigured = notConfigured(err);
       if (err || !current || !current.main) {
         if (window.console) console.error("Weather failed:", err);
         weatherFailed(weatherNotConfigured ? "Weather not configured" : "Weather unavailable");
+        forecastNote(true);
         return done(false);
       }
       renderCurrent(current);
@@ -414,11 +433,12 @@
       getJSON(owmUrl("forecast"), function (err2, forecast) {
         if (err2 || !forecast || !forecast.list) {
           if (window.console) console.error("Forecast failed:", err2);
+          forecastNote(true);
           return done(false);
         }
         renderForecast(forecast);
+        if (!meta.offline) { forecastAt = Date.now(); forecastNote(false); }
         done(!meta.offline); // cached copy while offline: keep retrying
-
       });
     });
   }, 10 * 60 * 1000);
@@ -514,6 +534,7 @@
     var daysInMonth = new Date(year, month + 1, 0).getDate();
     var monthStart = new Date(year, month, 1);
     var monthEnd = new Date(year, month, daysInMonth, 23, 59, 59, 999);
+    setText("cal-title", monthStart.toLocaleDateString([], { month: "long", year: "numeric" }));
 
     // Map each event onto every day it covers within this month
     // (multi-day events show on each day; events from other months don't leak in).
@@ -552,6 +573,7 @@
     for (var day = 1; day <= daysInMonth; day++) {
       var cell = document.createElement("div");
       cell.className = "cal-day" + (day === today ? " today" : "");
+      cell.setAttribute("data-day", day);
       var dateLabel = document.createElement("div");
       dateLabel.className = "cal-date";
       dateLabel.textContent = day;
@@ -566,6 +588,8 @@
       frag.appendChild(cell);
     }
 
+    calDayEvents = eventMap;
+    calMonthStart = monthStart;
     grid.innerHTML = "";
     grid.appendChild(frag);
   }
@@ -581,6 +605,72 @@
     var dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 23, 59, 59, 999);
     return e && e < dayEnd ? "Until " + fmtTime(new Date(e.getTime() + 1)) : "All day";
   }
+
+  /* Tap a calendar day to see all of its events (full titles + times). */
+  var calDayEvents = {};
+  var calMonthStart = new Date();
+  var dayModal = $("day-modal");
+  var dayModalTimer = null;
+
+  function eventTimeText(ev, dayDate) {
+    if (!ev.start || !ev.start.dateTime) return "All day";
+    var s = parseEventDate(ev), e = parseEventEnd(ev);
+    var dayEnd = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate() + 1);
+    var endsToday = e && e < dayEnd;
+    var endTxt = endsToday ? fmtTime(new Date(e.getTime() + 1)) : "";
+    // Same wording as the Today card for events that began on an earlier day.
+    if (s < dayDate) return endsToday ? "Until " + endTxt : "All day";
+    return fmtTime(s) + (endsToday ? " – " + endTxt : " – later");
+  }
+
+  function openDayModal(day) {
+    if (!dayModal) return;
+    var date = new Date(calMonthStart.getFullYear(), calMonthStart.getMonth(), day);
+    setText("day-modal-title", date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
+    var list = $("day-modal-list");
+    list.innerHTML = "";
+    var evs = calDayEvents[day] || [];
+    if (!evs.length) {
+      var none = document.createElement("div");
+      none.className = "modal-empty";
+      none.textContent = "No events";
+      list.appendChild(none);
+    }
+    evs.forEach(function (ev) {
+      var row = document.createElement("div");
+      row.className = "modal-event" + (isHolidayEvent(ev) ? " holiday" : "");
+      var t = document.createElement("div");
+      t.className = "modal-event-time";
+      t.textContent = eventTimeText(ev, date);
+      var n = document.createElement("div");
+      n.className = "modal-event-title";
+      n.textContent = ev.summary || "Untitled";
+      row.appendChild(t);
+      row.appendChild(n);
+      list.appendChild(row);
+    });
+    toggleClass(dayModal, "open", true);
+    // A wall panel shouldn't stay stuck on a popup: close it after a minute.
+    clearTimeout(dayModalTimer);
+    dayModalTimer = setTimeout(closeDayModal, 60000);
+  }
+
+  function closeDayModal() {
+    clearTimeout(dayModalTimer);
+    toggleClass(dayModal, "open", false);
+  }
+
+  if ($("calendar-grid")) $("calendar-grid").addEventListener("click", function (e) {
+    var el = e.target;
+    while (el && el !== this && !(el.getAttribute && el.getAttribute("data-day"))) el = el.parentNode;
+    if (el && el !== this) openDayModal(Number(el.getAttribute("data-day")));
+  });
+  if ($("day-modal-close")) $("day-modal-close").addEventListener("click", closeDayModal);
+  // Tapping the dimmed area outside the panel closes it too.
+  if (dayModal) dayModal.addEventListener("click", function (e) { if (e.target === dayModal) closeDayModal(); });
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Escape" || e.keyCode === 27) && dayModal && dayModal.classList.contains("open")) closeDayModal();
+  });
 
   function renderToday(events) {
     var container = $("today-events");
@@ -1655,6 +1745,40 @@
   }
   document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("webkitvisibilitychange", onVisibility);
+
+  /*
+   * Offline / stale-data badge: tells you when the weather or calendar on
+   * screen is old (Wi-Fi down, API failing), so stale data isn't mistaken
+   * for current data.
+   */
+  var statusSources = [
+    { label: "Weather", task: weatherTask, maxAge: 30 * 60 * 1000, on: function () { return !!(CFG.WEATHER_API_KEY && CFG.ZIP); } },
+    { label: "Calendar", task: calendarTask, maxAge: 45 * 60 * 1000, on: function () { return !!(CFG.CAL_API_KEY && CFG.CAL_ID); } }
+  ];
+  function whenText(ms) {
+    var d = new Date(ms);
+    var sameDay = dayKey(d) === dayKey(new Date());
+    return (sameDay ? "" : d.toLocaleDateString([], { weekday: "short" }) + " ") + fmtTime(d);
+  }
+  function updateStatus() {
+    var badge = $("status-badge");
+    if (!badge) return;
+    var now = Date.now();
+    var offline = navigator.onLine === false;
+    var parts = [];
+    var oldest = 0;
+    each(statusSources, function (s) {
+      if (!s.on() || !s.task.lastOk) return;
+      if (!oldest || s.task.lastOk < oldest) oldest = s.task.lastOk;
+      if (now - s.task.lastOk > s.maxAge) parts.push(s.label + " last updated " + whenText(s.task.lastOk));
+    });
+    var text = offline ? "Offline" + (oldest ? " \u00b7 last updated " + whenText(oldest) : "") : parts.join(" \u00b7 ");
+    setText("status-badge", text);
+    toggleClass(badge, "show", !!text);
+  }
+  window.addEventListener("online", function () { setTimeout(updateStatus, 0); });
+  window.addEventListener("offline", updateStatus);
+  setInterval(updateStatus, 15000);
 
   /* ===== OFFLINE START-UP (service worker) ===== */
   // Caches the app so it still opens if Wi-Fi is down when the tablet boots.
