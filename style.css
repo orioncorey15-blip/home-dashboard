@@ -287,6 +287,7 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
   .home-weather-bottom { margin-top: 10px; }
   .stat { margin-bottom: 4px; }
   .cal-day { min-height: 76px; }
+  .album-art { max-height: 40vh; } /* room for the demo note so the Output card isn't cut off */
 }
 
 /* ===== Phones / very narrow windows: single column, page scrolls ===== */
