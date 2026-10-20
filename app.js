@@ -17,6 +17,9 @@
   var API_BASE = String(CFG.API_BASE || "/api/");
   if (API_BASE.charAt(API_BASE.length - 1) !== "/") API_BASE += "/";
   function apiUrl(path) { return API_BASE + path; }
+  // Our functions answer 503 when their Netlify environment variables aren't set.
+  function notConfigured(err) { return !!(err && /^HTTP 503/.test(err.message)); }
+  var weatherNotConfigured = false, calNotConfigured = false;
 
   /* ===== HELPERS ===== */
   function $(id) { return document.getElementById(id); }
@@ -400,9 +403,10 @@
 
   var weatherTask = makeTask("Weather", function (done) {
     getJSON(owmUrl("weather"), function (err, current, meta) {
+      weatherNotConfigured = notConfigured(err);
       if (err || !current || !current.main) {
         if (window.console) console.error("Weather failed:", err);
-        weatherFailed("Weather unavailable");
+        weatherFailed(weatherNotConfigured ? "Weather not configured" : "Weather unavailable");
         return done(false);
       }
       renderCurrent(current);
@@ -463,7 +467,7 @@
       if (mainItems === null && holidayItems === null) {
         if (window.console) console.error("Calendar failed:", mainErr);
         if (!calLoaded) setText("today-date", now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
-        if (!calLoaded && $("today-events")) $("today-events").innerHTML = '<div style="opacity:0.6">Calendar unavailable</div>';
+        if (!calLoaded && $("today-events")) $("today-events").innerHTML = '<div style="opacity:0.6">' + (calNotConfigured ? "Calendar not configured" : "Calendar unavailable") + "</div>";
         return done(false);
       }
       var all = (mainItems || []).concat(holidayItems || []);
@@ -479,13 +483,15 @@
     }
 
     getJSON(calUrl("main", start, end), function (err, data, meta) {
+      calNotConfigured = notConfigured(err);
       if (err || !data) { mainErr = err; } else { mainItems = data.items || []; if (meta.offline) offline = true; }
       oneDone();
     });
-    getJSON(calUrl("holiday", start, end), function (err, data) {
+    getJSON(calUrl("holiday", start, end), function (err, data, meta) {
       if (err || !data) {
         if (window.console) console.warn("Holiday calendar failed:", err);
       } else {
+        if (meta.offline) offline = true;
         holidayItems = (data.items || []).map(function (ev) { ev._holiday = true; return ev; });
       }
       oneDone();
