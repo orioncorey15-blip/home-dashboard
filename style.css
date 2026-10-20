@@ -275,6 +275,8 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 /* ===== Short screens (e.g. 1024x600 tablets): tighten spacing so cards aren't cut off ===== */
 @media (max-height: 650px) {
   #content { padding: 56px 20px 16px; }
+  /* full-width Home: keep the ☰ button clear of the clock card's top edge */
+  #menuToggle { top: 6px; left: 12px; }
   .card { padding: 16px; }
   .home-grid, .media-layout { grid-gap: 14px; gap: 14px; }
   #home-time { font-size: 44px; }
