@@ -11,7 +11,8 @@ environment variables and the page only calls `/api/weather`, `/api/calendar`, `
 - `index.html`, `style.css`, `app.js`: the dashboard. Plain ES5 JavaScript, so it works on old Android WebViews.
   `style.css` starts with the design tokens (colours, type scale, spacing, card style) used by every page.
 - `weather-icons.js`: the animated SVG weather icons (bundled, no icon CDN).
-- `vendor/leaflet/` (Leaflet 1.9.4, BSD-2) and `fonts/` (Inter, SIL OFL): bundled so nothing depends on a CDN.
+- `vendor/leaflet/` (Leaflet 1.9.4, BSD-2) and `fonts/` (Inter for text and Newsreader for headings, both SIL OFL):
+  bundled so nothing depends on a CDN.
 - `config.js`: public settings only (night-mode hours, slideshow speed, Spotify client ID, YouTube favourites…).
   **Never put a key in it**: everything in it is visible to anyone who opens the site.
 - `sw.js`: service worker. Keeps a copy of the app and the last data, so the dashboard still opens if Wi-Fi
@@ -114,6 +115,19 @@ in `config.js`; a small live preview sits on the Home weather card (tap it to op
 key-less: NWS NEXRAD composite tiles from the Iowa Environmental Mesonet (falls back to RainViewer automatically),
 on Esri's Dark Gray Canvas base map (falls back to OpenStreetMap). The map library (Leaflet) is bundled.
 
+Zoom: the map fits roughly the home county and its neighbours (about ±0.3° latitude, ±0.8° longitude, e.g. Erie PA to
+Cleveland) into whatever size it has, capped at `RADAR_ZOOM` (default 9); the Home preview may use up to one level less.
+The recenter button goes back to that home view. *View Full Radar* makes the radar fill the Weather page (*Close* returns).
+
+`LOCATION_NAME` in `config.js` is the place name shown on the Weather page and Home card. It is only a label in the
+browser; the weather function still uses `OWM_ZIP` and returns no coordinates or city name.
+
+## Calendar
+The Calendar page opens on the current month. ‹ / › go back or forward up to 12 months (other months are fetched when
+you open them), *Today* jumps back, and it returns to the current month by itself after 3 minutes. Holidays are green,
+other events blue; tap a day for its full list. On Home, *Today's events* gets a small icon guessed from each title
+(work, kids, health, social, travel…); *View Calendar* opens the page.
+
 ## 5. Bluetooth button
 A web page can't pair a speaker, but it can open Android's Bluetooth settings:
 - **Fully Kiosk with *Open Other URL Schemes* ON (free):** set `BLUETOOTH_OPEN_VIA_INTENT_URL: true` in `config.js`.
@@ -121,7 +135,9 @@ A web page can't pair a speaker, but it can open Android's Bluetooth settings:
 - **Fully Kiosk PLUS** (paid licence, about €8.90 / $10.99 per device, one-time) with
   *Advanced Web Settings → Enable JavaScript Interface* ON: the button uses `fully.startIntent(...)` automatically.
 - Otherwise the button shows short instructions (swipe down → long-press Bluetooth) and a *Try* button.
-The "Output" card shows the Spotify device name when Spotify is connected.
+The "Source" bar at the bottom of Media switches between Spotify, YouTube (opens the player with search) and
+Bluetooth (the button above); it also shows the Spotify device name when Spotify is connected. *Repeat* cycles
+Off / All / One (Spotify Premium).
 
 ## Photos
 `PHOTO_SOURCE` in `config.js`:

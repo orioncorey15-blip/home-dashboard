@@ -12,6 +12,7 @@
     }
   </script>
   <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/newsreader-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="style.css">
   <meta name="theme-color" content="#0b1020">
@@ -71,79 +72,120 @@
       <!-- HOME -->
       <section class="page active" id="home">
         <button id="menuToggle" aria-label="Menu">☰</button>
-        <div class="home-grid">
-          <div class="card home-clock">
-            <div class="clock-main">
-              <div class="clock-time" id="home-time"></div>
-              <div class="clock-date" id="home-date"></div>
-            </div>
-            <div class="home-night">
-              <button id="night-toggle" class="night-btn" aria-label="Night mode">
-                <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
-                <span id="night-label">Night</span>
+        <div class="home-wrap">
+          <div class="home-hero">
+            <div class="clock-time" id="home-time"></div>
+            <div class="clock-date" id="home-date"></div>
+          </div>
+
+          <div class="home-grid">
+            <div class="card home-weather wx-card" id="home-weather">
+              <div class="wx-wash" aria-hidden="true"></div>
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" class="ct-icon"><path d="M7 18.5h10.2a3.8 3.8 0 0 0 .4-7.6 5.5 5.5 0 0 0-10.6-1A4.3 4.3 0 0 0 7 18.5z"/></svg>
+                <span>Weather</span><span class="ct-right" id="home-wx-place"></span>
+              </div>
+              <div class="home-weather-top">
+                <div class="wx-icon home-wx-icon" id="home-wx-icon"></div>
+                <div class="home-weather-main">
+                  <div class="home-temp" id="home-temp">--°</div>
+                  <div class="home-desc" id="home-desc">Loading…</div>
+                  <div class="home-feels"><span id="home-feels"></span><span class="hilo" id="home-hilo"></span></div>
+                </div>
+              </div>
+              <div class="mini-stats">
+                <div class="mini-stat">
+                  <svg viewBox="0 0 24 24"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0 0 12 0C18 10.1 12 3.5 12 3.5z"/></svg>
+                  <div><span class="ms-label">Humidity</span><span class="ms-value" id="home-humidity">--</span></div>
+                </div>
+                <div class="mini-stat">
+                  <svg viewBox="0 0 24 24"><path d="M4 18h16M7.5 18a4.5 4.5 0 0 1 9 0M12 7V3.5M9.5 5.5 12 3l2.5 2.5M4.6 12.6l1.6.9M19.4 12.6l-1.6.9"/></svg>
+                  <div><span class="ms-label">Sunrise</span><span class="ms-value" id="home-sunrise">--</span></div>
+                </div>
+                <div class="mini-stat">
+                  <svg viewBox="0 0 24 24"><path d="M3.5 9h11a3 3 0 1 0-3-3M3.5 13h15a3 3 0 1 1-3 3M3.5 17h7"/></svg>
+                  <div><span class="ms-label">Wind</span><span class="ms-value" id="home-wind">--</span></div>
+                </div>
+                <div class="mini-stat">
+                  <svg viewBox="0 0 24 24"><path d="M4 18h16M7.5 18a4.5 4.5 0 0 1 9 0M12 3.5V7M9.5 5 12 7.5 14.5 5M4.6 12.6l1.6.9M19.4 12.6l-1.6.9"/></svg>
+                  <div><span class="ms-label">Sunset</span><span class="ms-value" id="home-sunset">--</span></div>
+                </div>
+              </div>
+              <button class="home-radar" id="home-radar" aria-label="Open the full weather radar">
+                <div class="radar-map" id="home-radar-map"></div>
+                <div class="home-radar-label"><span class="live-dot"></span>Radar<span class="home-radar-time" id="home-radar-time"></span></div>
+                <div class="home-radar-open">View full radar</div>
               </button>
             </div>
-          </div>
 
-          <div class="card home-weather wx-card" id="home-weather">
-            <div class="wx-glow" aria-hidden="true"></div>
-            <div class="home-weather-top">
-              <div class="wx-icon home-wx-icon" id="home-wx-icon"></div>
-              <div class="home-weather-main">
-                <div class="home-temp" id="home-temp">--°</div>
-                <div class="home-desc" id="home-desc">Loading…</div>
+            <div class="card home-today">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" class="ct-icon"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+                <span>Today's events</span><span class="ct-right" id="today-date"></span>
               </div>
+              <div class="today-scroll">
+                <div id="today-events" class="today-events"></div>
+                <div class="upcoming" id="upcoming">
+                  <div class="eyebrow">Coming up</div>
+                  <div id="upcoming-events"></div>
+                </div>
+              </div>
+              <button class="card-link" id="view-calendar">View Calendar <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
-            <div class="home-feels"><span id="home-feels"></span><span class="hilo" id="home-hilo"></span></div>
-            <div class="home-weather-bottom">
-              <div class="chip"><span class="chip-label">Wind</span><span class="chip-value" id="home-wind">--</span></div>
-              <div class="chip"><span class="chip-label">Humidity</span><span class="chip-value" id="home-humidity">--</span></div>
-              <div class="chip"><span class="chip-label">Sunrise</span><span class="chip-value" id="home-sunrise">--</span></div>
-              <div class="chip"><span class="chip-label">Sunset</span><span class="chip-value" id="home-sunset">--</span></div>
-            </div>
-            <button class="home-radar" id="home-radar" aria-label="Open the weather radar">
-              <div class="radar-map" id="home-radar-map"></div>
-              <div class="home-radar-label"><span class="live-dot"></span>Radar<span class="home-radar-time" id="home-radar-time"></span></div>
-              <div class="home-radar-open">Tap to expand</div>
-            </button>
-          </div>
 
-          <div class="card home-today">
-            <div class="card-head">
-              <div>
-                <div class="eyebrow today-label">Today</div>
-                <div class="today-date" id="today-date"></div>
+            <div class="card slideshow-card">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" class="ct-icon"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="9.5" r="1.8"/><path d="m4 17 5-4.5 3.5 3 3-2.5L20 17"/></svg>
+                <span>Photo slideshow</span>
+                <span class="ss-nav">
+                  <button class="round-btn sm" id="ss-prev" aria-label="Previous photo"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+                  <button class="round-btn sm" id="ss-next" aria-label="Next photo"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+                </span>
               </div>
-              <div class="card-head-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
-              </div>
-            </div>
-            <div class="today-scroll">
-              <div id="today-events" class="today-events"></div>
-              <div class="upcoming" id="upcoming">
-                <div class="eyebrow">Coming up</div>
-                <div id="upcoming-events"></div>
+              <div class="slideshow-frame">
+                <div class="home-slideshow">
+                  <img id="home-slideshow-img" alt="Photo" referrerpolicy="no-referrer" />
+                </div>
+                <div class="photo-empty" id="home-photo-empty"></div>
               </div>
             </div>
           </div>
 
-          <div class="card slideshow-card">
-            <div class="home-slideshow">
-              <img id="home-slideshow-img" alt="Photo" referrerpolicy="no-referrer" />
+          <div class="home-bottom">
+            <div class="card home-nowplaying" id="home-nowplaying">
+              <button class="np-art" id="home-np-open" aria-label="Open Media">
+                <img id="home-np-art" alt="" referrerpolicy="no-referrer">
+                <span class="np-art-icon"><span class="eq"><i></i><i></i><i></i><i></i></span></span>
+              </button>
+              <div class="np-text" id="home-np-text" role="button" tabindex="0" aria-label="Open Media">
+                <div id="home-nowplaying-text">Not Playing</div>
+                <div class="np-sub" id="home-np-sub">Tap to choose Spotify or YouTube</div>
+                <div class="np-progress" id="home-np-progress">
+                  <div class="np-bar"><i id="home-np-bar"></i></div>
+                  <div class="np-times"><span id="home-np-pos"></span><span id="home-np-dur"></span></div>
+                </div>
+              </div>
+              <div class="np-controls">
+                <button class="np-btn" id="home-prev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M17.5 6v12L9 12z"/><rect x="6" y="6" width="2.4" height="12" rx="1"/></svg></button>
+                <button class="np-btn np-play" id="home-play" aria-label="Play / Pause">
+                  <svg viewBox="0 0 24 24" class="play-icon"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+                  <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5.5" width="3.6" height="13" rx="1"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1"/></svg>
+                </button>
+                <button class="np-btn" id="home-next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M6.5 6v12L15 12z"/><rect x="15.6" y="6" width="2.4" height="12" rx="1"/></svg></button>
+              </div>
             </div>
-            <div class="slideshow-shade" aria-hidden="true"></div>
-            <div class="photo-empty" id="home-photo-empty"></div>
-          </div>
 
-          <div class="card home-nowplaying" id="home-nowplaying" role="button" tabindex="0" aria-label="Open Media">
-            <div class="np-icon" aria-hidden="true">
-              <span class="eq"><i></i><i></i><i></i><i></i></span>
+            <div class="card home-night">
+              <div class="card-title"><span>Night mode</span></div>
+              <div class="night-row">
+                <svg viewBox="0 0 24 24" class="night-moon"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+                <div class="night-text">
+                  <div class="night-title">Night Mode <span class="night-state" id="night-label">Off</span></div>
+                  <div class="night-sub">Dims the screen for the night</div>
+                </div>
+                <button id="night-toggle" class="switch" role="switch" aria-checked="false" aria-label="Night mode"><span class="knob"></span></button>
+              </div>
             </div>
-            <div class="np-text">
-              <div class="eyebrow nowplaying-label">Now playing</div>
-              <div id="home-nowplaying-text">Not Playing</div>
-            </div>
-            <div class="np-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
           </div>
         </div>
       </section>
@@ -151,11 +193,16 @@
       <!-- CALENDAR -->
       <section class="page" id="calendar">
         <div class="cal-head">
-          <h2 id="cal-title" class="cal-title"></h2>
+          <button class="round-btn" id="cal-home" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2c0 .4.3.8.8.8H10v-5.5h4V20h3.7c.5 0 .8-.4.8-.8V9"/></svg></button>
+          <h2 id="cal-title" class="cal-title serif"></h2>
           <div class="cal-legend">
             <span><i class="lg lg-event"></i>Events</span>
             <span><i class="lg lg-holiday"></i>Holidays</span>
-            <span class="cal-hint">Tap a day for details</span>
+          </div>
+          <div class="cal-nav">
+            <button class="round-btn" id="cal-prev" aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+            <button class="round-btn" id="cal-next" aria-label="Next month"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button class="pill-btn" id="cal-today"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="dot" cx="12" cy="15" r="1.6"/></svg>Today</button>
           </div>
         </div>
         <div id="calendar-grid" class="calendar-grid"></div>
@@ -164,30 +211,72 @@
       <!-- WEATHER -->
       <section class="page" id="weather">
         <div class="weather-layout">
-          <div class="card weather-current wx-card" id="weather-hero">
-            <div class="wx-glow" aria-hidden="true"></div>
-            <div class="current-left">
-              <div class="wx-icon weather-icon" id="weather-icon"></div>
-              <div>
+          <div class="card weather-main wx-card" id="weather-hero">
+            <div class="wx-wash" aria-hidden="true"></div>
+            <div class="wx-top">
+              <div class="wx-place">
+                <svg viewBox="0 0 24 24" class="wx-pin"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
+                <div>
+                  <div class="wx-place-name" id="weather-place"></div>
+                  <div class="wx-updated" id="weather-updated">Updating…</div>
+                </div>
+              </div>
+              <button class="pill-btn" id="weather-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>Refresh</button>
+            </div>
+
+            <div class="wx-now">
+              <div class="wx-now-text">
                 <div id="weather-temp">--°</div>
                 <div id="weather-desc">Loading…</div>
-                <div class="weather-sub"><span id="weather-feels"></span><span class="hilo" id="weather-hilo"></span></div>
+                <div class="wx-outlook" id="weather-outlook"></div>
+                <div class="weather-sub"><span id="weather-hilo"></span><span class="wx-sun">Sunrise <b id="weather-sunrise">--</b> · Sunset <b id="weather-sunset">--</b></span></div>
+              </div>
+              <div class="wx-icon weather-icon" id="weather-icon"></div>
+            </div>
+
+            <div class="wx-stats">
+              <div class="wx-stat">
+                <svg viewBox="0 0 24 24"><path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v7"/></svg>
+                <div class="wx-stat-text"><span class="label">Feels like</span><span class="value" id="weather-feels">--</span><span class="sub" id="weather-feels-note"></span></div>
+              </div>
+              <div class="wx-stat">
+                <svg viewBox="0 0 24 24"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0 0 12 0C18 10.1 12 3.5 12 3.5z"/></svg>
+                <div class="wx-stat-text"><span class="label">Humidity</span><span class="value" id="weather-humidity">--</span><span class="sub" id="weather-humidity-note"></span></div>
+              </div>
+              <div class="wx-stat">
+                <svg viewBox="0 0 24 24"><path d="M3.5 9h11a3 3 0 1 0-3-3M3.5 13h15a3 3 0 1 1-3 3M3.5 17h7"/></svg>
+                <div class="wx-stat-text"><span class="label">Wind</span><span class="value" id="weather-wind">--</span><span class="sub" id="weather-wind-note"></span></div>
+              </div>
+              <div class="wx-stat">
+                <svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                <div class="wx-stat-text"><span class="label">Visibility</span><span class="value" id="weather-visibility">--</span><span class="sub" id="weather-visibility-note"></span></div>
               </div>
             </div>
-            <div class="current-right">
-              <div class="stat-tile"><span class="label">Wind</span><span class="value" id="weather-wind">--</span><span class="sub" id="weather-gust"></span></div>
-              <div class="stat-tile"><span class="label">Humidity</span><span class="value" id="weather-humidity">--</span><span class="sub" id="weather-clouds"></span></div>
-              <div class="stat-tile"><span class="label">Pressure</span><span class="value" id="weather-pressure">--</span><span class="sub">inHg</span></div>
-              <div class="stat-tile"><span class="label">Visibility</span><span class="value" id="weather-visibility">--</span><span class="sub"></span></div>
-              <div class="stat-tile"><span class="label">Sunrise</span><span class="value" id="weather-sunrise">--</span><span class="sub" id="weather-daylight"></span></div>
-              <div class="stat-tile"><span class="label">Sunset</span><span class="value" id="weather-sunset">--</span><span class="sub" id="weather-sunset-in"></span></div>
+
+            <div class="wx-section">
+              <div class="section-head">
+                <h2><svg viewBox="0 0 24 24" class="sh-icon"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>Hourly forecast</h2>
+                <span class="section-note">Next 24 hours</span>
+              </div>
+              <div id="forecast-note" class="forecast-note"></div>
+              <div id="hourly" class="hourly-row"></div>
+            </div>
+
+            <div class="wx-section">
+              <div class="section-head">
+                <h2><svg viewBox="0 0 24 24" class="sh-icon"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="daily-title">6-day forecast</span></h2>
+              </div>
+              <div id="daily" class="daily-row"></div>
             </div>
           </div>
 
           <div class="card weather-radar">
             <div id="radar-container" class="radar-map"></div>
             <div class="radar-overlay-top">
-              <div class="radar-badge"><span class="live-dot"></span>Live radar</div>
+              <div class="radar-head">
+                <div class="radar-badge"><span class="live-dot"></span>Radar</div>
+                <button class="radar-expand" id="radar-expand"><span id="radar-expand-label">View Full Radar</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+              </div>
               <div class="radar-tools">
                 <button class="radar-tool" id="radar-zoom-in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
                 <button class="radar-tool" id="radar-zoom-out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
@@ -207,16 +296,6 @@
             <div class="radar-msg" id="radar-msg"></div>
           </div>
 
-          <div class="card weather-hourly">
-            <div class="section-head"><h2>Next 24 hours</h2><span class="section-note" id="weather-updated"></span></div>
-            <div id="forecast-note" class="forecast-note"></div>
-            <div id="hourly" class="hourly-row"></div>
-          </div>
-
-          <div class="card weather-daily">
-            <div class="section-head"><h2>5-day forecast</h2></div>
-            <div id="daily" class="daily-row"></div>
-          </div>
         </div>
       </section>
 
@@ -250,6 +329,10 @@
                     <svg viewBox="0 0 24 24"><path d="M6.5 6v12L15 12z"/><rect x="15.6" y="6" width="2.4" height="12" rx="1"/></svg>
                   </button>
                 </div>
+                <button class="repeat-btn" id="repeat-btn" aria-label="Repeat: off">
+                  <svg viewBox="0 0 24 24"><path d="M4.5 11V9.5a3 3 0 0 1 3-3h11M15.5 3.5l3 3-3 3M19.5 13v1.5a3 3 0 0 1-3 3h-11M8.5 20.5l-3-3 3-3"/></svg>
+                  <span>Repeat</span><span class="repeat-state" id="repeat-state">Off</span>
+                </button>
                 <div class="sp-message" id="sp-message"></div>
                 <div class="demo-note" id="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
                 <div class="sp-account">
@@ -305,32 +388,33 @@
             </div>
           </div>
 
-          <div class="media-shortcuts">
-            <button class="shortcut-btn active" data-source="spotify" title="Spotify">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M7.2 9.4c3.3-1 7-.6 9.8 1.1M7.9 12.2c2.7-.8 5.8-.5 8.2.9M8.6 14.9c2.1-.6 4.4-.4 6.1.6"/></svg>
-              <span>Spotify</span>
-            </button>
-            <button class="shortcut-btn" data-source="youtube" title="YouTube">
-              <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" class="fill"/></svg>
-              <span>YouTube</span>
-            </button>
-            <button class="shortcut-btn" data-source="bluetooth" title="Bluetooth">
-              <svg viewBox="0 0 24 24"><path d="m7 7.5 10 9L12 21V3l5 4.5-10 9"/></svg>
-              <span>Bluetooth</span>
-            </button>
-          </div>
-
           <div class="card media-volume">
-            <svg viewBox="0 0 24 24" class="vol-icon"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+            <div class="vol-head"><svg viewBox="0 0 24 24" class="vol-icon"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>Volume</div>
             <div class="volume-slider-wrap">
               <input type="range" min="0" max="100" value="60" class="volume-slider" aria-label="Volume">
             </div>
             <button class="mute-btn">Mute</button>
           </div>
 
-          <div class="card media-output">
-            <span class="output-label">Output</span>
-            <strong>Bluetooth Speaker</strong>
+          <div class="card media-source">
+            <div class="source-head">
+              <span class="eyebrow">Source</span>
+              <span class="media-output"><span class="output-label">Output</span> <strong>Bluetooth Speaker</strong></span>
+            </div>
+            <div class="media-shortcuts">
+              <button class="shortcut-btn active" data-source="spotify" title="Spotify">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M7.2 9.4c3.3-1 7-.6 9.8 1.1M7.9 12.2c2.7-.8 5.8-.5 8.2.9M8.6 14.9c2.1-.6 4.4-.4 6.1.6"/></svg>
+                <span>Spotify</span>
+              </button>
+              <button class="shortcut-btn" data-source="youtube" title="YouTube">
+                <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" class="fill"/></svg>
+                <span>YouTube</span>
+              </button>
+              <button class="shortcut-btn" data-source="bluetooth" title="Bluetooth">
+                <svg viewBox="0 0 24 24"><path d="m7 7.5 10 9L12 21V3l5 4.5-10 9"/></svg>
+                <span>Bluetooth</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>

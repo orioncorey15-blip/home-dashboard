@@ -192,12 +192,15 @@
   var homeGrid = document.querySelector(".home-grid");
   if (homeGrid) homeGrid.addEventListener("click", function () { toggleClass($("sidebar"), "open", false); });
 
-  // The Home "now playing" card opens the Media page.
+  // Home: the now-playing art/title open the Media page; "View Calendar" opens the calendar.
   (function () {
-    var np = $("home-nowplaying");
-    if (!np) return;
-    np.addEventListener("click", function (e) { if (e.stopPropagation) e.stopPropagation(); showPage("media"); });
-    np.addEventListener("keydown", function (e) { if (e.keyCode === 13 || e.keyCode === 32) showPage("media"); });
+    function openMedia(e) { if (e && e.stopPropagation) e.stopPropagation(); showPage("media"); }
+    each([$("home-np-open"), $("home-np-text")], function (n) {
+      if (!n) return;
+      n.addEventListener("click", openMedia);
+      n.addEventListener("keydown", function (e) { if (e.keyCode === 13 || e.keyCode === 32) openMedia(e); });
+    });
+    if ($("view-calendar")) $("view-calendar").addEventListener("click", function () { showPage("calendar"); });
   })();
 
   /* ===== CLOCK (+ day-change / wake-from-sleep detection) ===== */
@@ -302,9 +305,9 @@
 
   function setNight(on) {
     toggleClass(document.body, "night", on);
-    if ($("night-label")) setText("night-label", on ? "Night on" : "Night");
-    else if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
+    setText("night-label", on ? "On" : "Off");
     toggleClass(nightBtn, "on", on);
+    if (nightBtn) nightBtn.setAttribute("aria-checked", on ? "true" : "false");
     store.set("nightMode", on);
     if (NIGHT_SCHEDULED) store.set("nightModePeriod", nightPeriodKey(new Date()));
   }
@@ -394,6 +397,45 @@
     return !!(icon && icon.charAt(2) === "n");
   }
 
+  // Plain-words captions for the Weather page stat tiles.
+  function feelsNote(temp, feels) {
+    if (!num(temp) || !num(feels)) return "";
+    var d = feels - temp;
+    if (Math.abs(d) < 3) return "Similar to air temp";
+    if (d < 0) return d <= -8 ? "Much colder (wind)" : "Cooler than air temp";
+    return d >= 8 ? "Much warmer (humid)" : "Warmer than air temp";
+  }
+  function humidityNote(h) {
+    if (!num(h)) return "";
+    return h < 30 ? "Dry" : h <= 70 ? "Comfortable" : h <= 85 ? "Humid" : "Very humid";
+  }
+  function windNote(mph, gust) {
+    if (!num(mph)) return "";
+    var t = mph < 1 ? "Calm" : mph < 4 ? "Light air" : mph < 8 ? "Light breeze" : mph < 13 ? "Gentle breeze" :
+      mph < 19 ? "Moderate breeze" : mph < 25 ? "Fresh breeze" : mph < 32 ? "Strong breeze" : mph < 39 ? "Near gale" : "Gale";
+    if (num(gust) && gust > mph + 5) t = "Gusts " + Math.round(gust) + " mph";
+    return t;
+  }
+  function visibilityNote(m) {
+    if (!num(m)) return "";
+    var mi = m / 1609;
+    return mi >= 6 ? "Clear view" : mi >= 3 ? "Slight haze" : mi >= 1 ? "Hazy" : "Poor visibility";
+  }
+
+  // "Updated just now" / "Updated 12 min ago" (refreshed every minute).
+  var weatherUpdatedAt = 0;
+  function paintUpdated() {
+    if (!weatherUpdatedAt) return;
+    var mins = Math.floor((Date.now() - weatherUpdatedAt) / 60000);
+    setText("weather-updated", mins < 1 ? "Updated just now" : mins < 60 ? "Updated " + mins + " min ago" : "Updated " + fmtTime(new Date(weatherUpdatedAt)));
+  }
+  setInterval(paintUpdated, 30000);
+
+  // Location label: client-side only (config LOCATION_NAME); the weather API never returns a place.
+  var PLACE = String(CFG.LOCATION_NAME || "");
+  setText("weather-place", PLACE || "Local weather");
+  setText("home-wx-place", PLACE ? PLACE.split(",")[0] : "");
+
   function renderCurrent(current) {
     lastCurrent = current;
     var main = current.main || {};
@@ -422,32 +464,59 @@
     setText("home-feels", feels);
     setText("home-humidity", humidity);
     setText("home-wind", (dir ? dir + " " : "") + speed);
-    setText("home-visibility", vis);
     setText("home-sunrise", rise);
     setText("home-sunset", set);
 
     setText("weather-temp", temp);
     setText("weather-desc", desc);
-    setText("weather-feels", feels);
+    setText("weather-feels", num(main.feels_like) ? Math.round(main.feels_like) + "°" : "--");
+    setText("weather-feels-note", feelsNote(main.temp, main.feels_like));
     setText("weather-humidity", humidity);
-    setText("weather-pressure", num(main.pressure) ? (main.pressure * 0.02953).toFixed(2) : "--");
+    setText("weather-humidity-note", humidityNote(main.humidity));
     setText("weather-wind", (dir ? dir + " " : "") + speed);
-    setText("weather-gust", num(wind.gust) && wind.gust > (wind.speed || 0) + 2 ? "Gusts " + Math.round(wind.gust) + " mph" : "");
+    setText("weather-wind-note", windNote(wind.speed, wind.gust));
     setText("weather-visibility", vis);
-    setText("weather-clouds", current.clouds && num(current.clouds.all) ? current.clouds.all + "% cloud cover" : "");
-    var nowS = Date.now() / 1000, until = num(sys.sunset) ? sys.sunset - nowS : -1;
-    setText("weather-sunset-in", until > 0 && until < 86400 ? "in " + (until >= 3600 ? Math.floor(until / 3600) + "h " : "") + Math.floor(until % 3600 / 60) + "m" : "");
+    setText("weather-visibility-note", visibilityNote(current.visibility));
     setText("weather-sunrise", rise);
     setText("weather-sunset", set);
-    if (num(sys.sunrise) && num(sys.sunset) && sys.sunset > sys.sunrise) {
-      var mins = Math.round((sys.sunset - sys.sunrise) / 60);
-      var dl = $("weather-daylight");
-      if (dl) dl.innerHTML = Math.floor(mins / 60) + "h " + pad2(mins % 60) + 'm<span class="dl-word"> daylight</span>';
-    }
-    setText("weather-updated", "Updated " + fmtTime(new Date()));
+    weatherUpdatedAt = Date.now();
+    paintUpdated();
     var hl = todayHiLo();
     setText("home-hilo", hl);
     setText("weather-hilo", hl);
+    renderOutlook();
+  }
+
+  /*
+   * One plain sentence about the next ~12 hours under the big temperature, e.g.
+   * "Light rain likely around 11 PM" or "Clouds increasing later".
+   */
+  function renderOutlook() {
+    var list = ((lastForecast && lastForecast.list) || []).filter(function (f) { return f.dt * 1000 > Date.now() - 90 * 60000; }).slice(0, 4);
+    if (!lastCurrent || !list.length) { setText("weather-outlook", ""); return; }
+    var i, wet = null;
+    for (i = 0; i < list.length; i++) {
+      var k = slotKind(list[i]);
+      if (WET_RANK[k] && ((list[i].pop || 0) >= 0.3 || precipOf(list[i]) >= 0.5)) { wet = list[i]; break; }
+    }
+    var text;
+    var nowKind = slotKind(lastCurrent);
+    if (wet && WET_RANK[nowKind]) text = capFirst(wxOf(wet).description || "Rain") + " continuing";
+    else if (wet) {
+      var d = new Date(wet.dt * 1000);
+      text = capFirst(wxOf(wet).description || "Rain") + " likely around " + d.toLocaleString("en-US", { hour: "numeric", hour12: true });
+    } else {
+      var now = SKY_SCORE.hasOwnProperty(nowKind) ? SKY_SCORE[nowKind] : 2, sum = 0, n = 0;
+      for (i = 0; i < list.length; i++) { var kk = slotKind(list[i]); if (SKY_SCORE.hasOwnProperty(kk)) { sum += SKY_SCORE[kk]; n++; } }
+      var later = n ? sum / n : now;
+      var night = isNightNow(lastCurrent);
+      if (later - now >= 1) text = "Clouds increasing later";
+      else if (now - later >= 1) text = "Clearing later" + (night ? " tonight" : "");
+      else if (later < 0.8) text = "Clear skies through " + (night ? "the night" : "the day");
+      else if (later > 2.5) text = "Staying overcast";
+      else text = "Little change over the next few hours";
+    }
+    setText("weather-outlook", text + ".");
   }
 
   function popText(p) {
@@ -529,13 +598,15 @@
       list.slice(0, 8).forEach(function (f, i) {
         var d = new Date(f.dt * 1000);
         var box = el("div", "hour" + (i === 0 ? " first" : ""));
-        box.appendChild(el("div", "hour-time", d.toLocaleString("en-US", { hour: "numeric", hour12: true })));
+        box.appendChild(el("div", "hour-time", i === 0 && d.getTime() - Date.now() < 90 * 60000 ? "Now" : d.toLocaleString("en-US", { hour: "numeric", hour12: true })));
         var ic = el("div", "wx-icon hour-icon");
         if (WX) ic.innerHTML = WX.svg(wxKind(f), false);
         box.appendChild(ic);
         box.appendChild(el("div", "hour-temp", deg(f.main && f.main.temp)));
-        var pop = popText(f.pop);
-        var p = el("div", "hour-pop" + (pop ? "" : " dry"), pop || "–");
+        var pct = Math.round((f.pop || 0) * 100);
+        var p = el("div", "hour-pop" + (pct >= 30 ? " wet" : pct >= 10 ? "" : " dry"));
+        p.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0 0 12 0C18 10.1 12 3.5 12 3.5z"/></svg>';
+        p.appendChild(document.createTextNode(pct + "%"));
         box.appendChild(p);
         hf.appendChild(box);
       });
@@ -556,7 +627,8 @@
         day.pop = Math.max(day.pop, f.pop || 0);
         day.slots.push(f);
       });
-      if (days.length > 5) days = days.slice(0, 5);
+      if (days.length > 6) days = days.slice(0, 6);
+      setText("daily-title", days.length + "-day forecast");
       var all = [];
       days.forEach(function (d) { all = all.concat(d.temps); });
       var gMin = all.length ? Math.min.apply(null, all) : 0, gMax = all.length ? Math.max.apply(null, all) : 1;
@@ -566,33 +638,32 @@
       days.forEach(function (d) {
         if (!d.temps.length) return;
         var hi = Math.max.apply(null, d.temps), lo = Math.min.apply(null, d.temps);
-        var box = el("div", "day");
-        box.appendChild(el("div", "day-name", dayKey(d.date) === todayK ? "Today" : d.date.toLocaleDateString([], { weekday: "short" })));
         var sum = summarizeDay(d.slots);
+        var box = el("div", "day");
+        box.setAttribute("title", sum.label);
+        box.appendChild(el("div", "day-name", dayKey(d.date) === todayK ? "Today" : d.date.toLocaleDateString([], { weekday: "short" })));
         var ic = el("div", "wx-icon day-icon");
         if (WX) ic.innerHTML = WX.svg(sum.kind, false);
-        ic.setAttribute("title", sum.label);
         box.appendChild(ic);
-        var mid = el("div", "day-mid");
-        mid.appendChild(el("div", "day-desc", sum.label));
-        var pop = popText(d.pop), inch = d.precip / 25.4;
-        mid.appendChild(el("div", "day-pop" + (pop ? "" : " dry"), pop ? pop + (inch >= 0.005 ? " · " + inch.toFixed(2) + '"' : "") : ""));
-        box.appendChild(mid);
+        box.appendChild(el("div", "day-desc", sum.label));
         var temps = el("div", "day-temps");
+        temps.appendChild(el("span", "day-hi", Math.round(hi) + "°"));
         temps.appendChild(el("span", "day-lo", Math.round(lo) + "°"));
-        var bar = el("span", "range");
+        box.appendChild(temps);
+        var bar = el("div", "range");
         var fill = el("i");
         fill.style.left = Math.round((lo - gMin) / span * 100) + "%";
-        fill.style.width = Math.max(6, Math.round((hi - lo) / span * 100)) + "%";
+        fill.style.width = Math.max(8, Math.round((hi - lo) / span * 100)) + "%";
         bar.appendChild(fill);
-        temps.appendChild(bar);
-        temps.appendChild(el("span", "day-hi", Math.round(hi) + "°"));
-        box.appendChild(temps);
+        box.appendChild(bar);
+        var pop = popText(d.pop), inch = d.precip / 25.4;
+        box.appendChild(el("div", "day-pop" + (pop ? "" : " dry"), pop ? pop + (inch >= 0.01 ? " · " + inch.toFixed(2) + '"' : "") : "Dry"));
         df.appendChild(box);
       });
       daily.innerHTML = "";
       daily.appendChild(df);
     }
+    renderOutlook();
   }
 
   function weatherFailed(msg) {
@@ -645,6 +716,12 @@
     });
   }, 10 * 60 * 1000);
 
+  if ($("weather-refresh")) $("weather-refresh").addEventListener("click", function () {
+    setText("weather-updated", "Updating…");
+    weatherTask.run();
+    if (typeof radar !== "undefined" && radar) radar.refreshNow();
+  });
+
   /* ===== WEATHER RADAR (Leaflet, bundled in vendor/leaflet) =====
    * Animated precipitation radar centred on the house. Source: NWS NEXRAD composite tiles from
    * the Iowa Environmental Mesonet (free, no key, CORS-enabled, updated every 5 minutes; the last
@@ -657,7 +734,7 @@
   var radar = (function () {
     var LAT = num(CFG.RADAR_LAT) ? CFG.RADAR_LAT : 41.86;
     var LON = num(CFG.RADAR_LON) ? CFG.RADAR_LON : -80.79;
-    var ZOOM = num(CFG.RADAR_ZOOM) ? CFG.RADAR_ZOOM : 7;
+    var ZOOM = num(CFG.RADAR_ZOOM) ? CFG.RADAR_ZOOM : 9;
     var IEM = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913";
     var IEM_META = "https://mesonet.agron.iastate.edu/data/gis/images/4326/USCOMP/n0q_0.json";
     var RV_META = "https://api.rainviewer.com/public/weather-maps.json";
@@ -718,7 +795,7 @@
       m.layers = [];
       each(frames, function (f, i) {
         var opts = { opacity: i === idx ? OPACITY : 0, zIndex: 5, pane: "radar", updateWhenIdle: true, keepBuffer: 1, attribution: "" };
-        if (provider === "rainviewer") { opts.maxNativeZoom = 7; opts.maxZoom = 10; }
+        if (provider === "rainviewer") { opts.maxNativeZoom = 7; opts.maxZoom = 12; }
         var layer = window.L.tileLayer(f.url, opts);
         layer.on("tileload", function () { m.loaded++; if (m.loaded === 1) msg(""); });
         layer.on("tileerror", function () { m.errors++; checkHealth(); });
@@ -772,11 +849,24 @@
       });
     }
 
+    /*
+     * Home view: centred on the house, zoomed so roughly Erie PA to Cleveland (about +-0.8 deg of
+     * longitude) fills the map at its current size: RADAR_ZOOM on a wide map, down to one level
+     * less on a small one (quarter-level steps). Recenter returns here.
+     */
+    function homeZoom(map) {
+      var b = window.L.latLngBounds([LAT - 0.3, LON - 0.8], [LAT + 0.3, LON + 0.8]);
+      var z = map.getBoundsZoom(b, false);
+      if (!num(z)) z = ZOOM;
+      z = Math.floor(z * 4) / 4;
+      return Math.max(ZOOM - 1, Math.min(ZOOM, z));
+    }
+
     function makeMap(name, elId, interactive, zoom) {
       var host = $(elId);
       if (!HAS_L || !host || maps[name]) return;
       var map = window.L.map(host, {
-        center: [LAT, LON], zoom: zoom, minZoom: 4, maxZoom: interactive ? 10 : zoom,
+        center: [LAT, LON], zoom: zoom, minZoom: 4, maxZoom: interactive ? Math.max(11, zoom) : zoom, zoomSnap: 0.25, zoomDelta: 1,
         zoomControl: false, attributionControl: true, fadeAnimation: true, zoomAnimation: interactive,
         dragging: interactive, touchZoom: interactive, doubleClickZoom: interactive, scrollWheelZoom: false,
         boxZoom: false, keyboard: false, tap: false, inertia: interactive
@@ -799,7 +889,9 @@
       });
       var icon = window.L.divIcon({ className: "radar-home", html: "<span></span>", iconSize: [16, 16], iconAnchor: [8, 8] });
       window.L.marker([LAT, LON], { icon: icon, interactive: false, keyboard: false }).addTo(map);
-      maps[name] = { map: map, layers: [], el: host, loaded: 0, errors: 0, srcAttr: "" };
+      var hz = homeZoom(map);
+      map.setView([LAT, LON], hz, { animate: false });
+      maps[name] = { map: map, layers: [], el: host, loaded: 0, errors: 0, srcAttr: "", homeZ: hz };
       buildRadarLayers(maps[name]);
     }
 
@@ -875,11 +967,21 @@
           if (!any && (maps.full || maps.mini)) checkHealth();
         }, 20000);
       }
-      if (currentPage === "home") makeMap("mini", "home-radar-map", false, Math.max(4, ZOOM - 1));
+      if (currentPage === "home") makeMap("mini", "home-radar-map", false, ZOOM);
       if (currentPage === "weather") makeMap("full", "radar-container", true, ZOOM);
     }
 
+    // "View Full Radar": the radar card fills the content area (the nav rail stays usable).
+    function expand(on) {
+      if (on && currentPage !== "weather") on = false;
+      if (document.body.classList.contains("radar-full") === !!on) return;
+      toggleClass(document.body, "radar-full", !!on);
+      setText("radar-expand-label", on ? "Close" : "View Full Radar");
+      setTimeout(function () { if (maps.full) { try { maps.full.map.invalidateSize(false); } catch (e) { /* ignore */ } } }, 60);
+    }
+
     function onPageChange() {
+      if (currentPage !== "weather") expand(false);
       if (!startedAt && currentPage !== "home" && currentPage !== "weather") return;
       ensure();
       var vis = visibleMaps();
@@ -892,10 +994,14 @@
       if ($("home-radar")) $("home-radar").addEventListener("click", function (e) {
         if (e.stopPropagation) e.stopPropagation();
         showPage("weather");
+        expand(true);
+      });
+      if ($("radar-expand")) $("radar-expand").addEventListener("click", function () {
+        expand(!document.body.classList.contains("radar-full"));
       });
       if ($("radar-play")) $("radar-play").addEventListener("click", function () { setPlaying(!playing); });
       if ($("radar-recenter")) $("radar-recenter").addEventListener("click", function () {
-        if (maps.full) maps.full.map.setView([LAT, LON], ZOOM);
+        if (maps.full) maps.full.map.setView([LAT, LON], maps.full.homeZ);
       });
       if ($("radar-zoom-in")) $("radar-zoom-in").addEventListener("click", function () { if (maps.full) maps.full.map.zoomIn(); });
       if ($("radar-zoom-out")) $("radar-zoom-out").addEventListener("click", function () { if (maps.full) maps.full.map.zoomOut(); });
@@ -904,17 +1010,31 @@
         if (i !== null && i !== undefined && i !== "") { setPlaying(false); show(Number(i)); }
       });
       window.addEventListener("resize", function () {
-        each(visibleMaps(), function (m) { try { m.map.invalidateSize(false); } catch (e) { /* ignore */ } });
+        each(visibleMaps(), function (m) {
+          try {
+            m.map.invalidateSize(false);
+            // card size changed (rotation): the home view is re-fitted (not while "full radar" is open)
+            if (!document.body.classList.contains("radar-full")) m.homeZ = homeZoom(m.map);
+          } catch (e) { /* ignore */ }
+        });
       });
       // first map a moment after start-up so the rest of the page paints first
       setTimeout(onPageChange, 800);
     }
 
     return {
-      init: init, onPageChange: onPageChange, schedule: schedule,
+      init: init, onPageChange: onPageChange, schedule: schedule, expand: expand,
+      refreshNow: function () { if (startedAt) refresh(); },
       state: function () {
-        var s = { provider: provider, frames: frames.length, idx: idx, playing: playing, maps: {} };
-        for (var k in maps) if (maps.hasOwnProperty(k)) s.maps[k] = { loaded: maps[k].loaded, errors: maps[k].errors, layers: maps[k].layers.length };
+        var s = { provider: provider, frames: frames.length, idx: idx, playing: playing, homeZoom: ZOOM, maps: {} };
+        for (var k in maps) {
+          if (!maps.hasOwnProperty(k)) continue;
+          var c = maps[k].map.getCenter();
+          s.maps[k] = {
+            loaded: maps[k].loaded, errors: maps[k].errors, layers: maps[k].layers.length,
+            zoom: maps[k].map.getZoom(), center: [Math.round(c.lat * 100) / 100, Math.round(c.lng * 100) / 100]
+          };
+        }
         return s;
       }
     };
@@ -1005,9 +1125,60 @@
   }, 15 * 60 * 1000);
 
   function renderCalendarAll() {
-    renderCalendar(calEvents);
+    renderCalendar(calOffset ? (monthCache[monthKey(calOffset)] || []) : calEvents);
     renderToday(calEvents);
   }
+
+  /*
+   * Month navigation (prev / next / Today). The current month comes from calendarTask;
+   * other months (up to a year either way) are fetched on demand and kept for 15 minutes.
+   * A wall display shouldn't stay on another month: it returns to today after 3 minutes.
+   */
+  var calOffset = 0;
+  var monthCache = {}, monthCacheAt = {};
+  var calReturnTimer = null;
+  function monthKey(off) {
+    var n = new Date();
+    var d = new Date(n.getFullYear(), n.getMonth() + off, 1);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1);
+  }
+  function loadMonth(off) {
+    var key = monthKey(off);
+    if (monthCache[key] && Date.now() - monthCacheAt[key] < 15 * 60 * 1000) { renderCalendarAll(); return; }
+    var n = new Date();
+    var start = new Date(n.getFullYear(), n.getMonth() + off, 1).toISOString();
+    var end = new Date(n.getFullYear(), n.getMonth() + off + 1, 0, 23, 59, 59).toISOString();
+    var pending = 2, items = [];
+    function one() {
+      if (--pending > 0) return;
+      items.sort(function (a, b) {
+        var da = parseEventDate(a), db = parseEventDate(b);
+        return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+      });
+      monthCache[key] = items; monthCacheAt[key] = Date.now();
+      if (monthKey(calOffset) === key) renderCalendarAll();
+    }
+    getJSON(calUrl("main", start, end), function (err, data) { if (!err && data) items = items.concat(data.items || []); one(); });
+    getJSON(calUrl("holiday", start, end), function (err, data) {
+      if (!err && data) items = items.concat((data.items || []).map(function (ev) { ev._holiday = true; return ev; }));
+      one();
+    });
+  }
+  function setCalOffset(off) {
+    calOffset = Math.max(-12, Math.min(12, off));
+    clearTimeout(calReturnTimer);
+    if (calOffset) {
+      calReturnTimer = setTimeout(function () { setCalOffset(0); }, 3 * 60 * 1000);
+      renderCalendarAll(); // the grid right away (events fill in when loaded)
+      loadMonth(calOffset);
+    } else {
+      renderCalendarAll();
+    }
+  }
+  if ($("cal-prev")) $("cal-prev").addEventListener("click", function () { setCalOffset(calOffset - 1); });
+  if ($("cal-next")) $("cal-next").addEventListener("click", function () { setCalOffset(calOffset + 1); });
+  if ($("cal-today")) $("cal-today").addEventListener("click", function () { setCalOffset(0); });
+  if ($("cal-home")) $("cal-home").addEventListener("click", function () { showPage("home"); });
 
   // the rest show as "+N more" (tap the day for all of them); 2 on short screens like 1024x600
   var MAX_CELL_EVENTS = (window.innerHeight || 800) < 700 ? 2 : 3;
@@ -1016,8 +1187,10 @@
     if (!grid) return;
 
     var now = new Date();
-    var year = now.getFullYear();
-    var month = now.getMonth();
+    var view = new Date(now.getFullYear(), now.getMonth() + calOffset, 1);
+    var year = view.getFullYear();
+    var month = view.getMonth();
+    var isThisMonth = calOffset === 0;
     var firstDay = new Date(year, month, 1).getDay();
     var daysInMonth = new Date(year, month + 1, 0).getDate();
     var monthStart = new Date(year, month, 1);
@@ -1051,16 +1224,20 @@
       frag.appendChild(h);
     });
 
+    // leading days from the previous month (greyed, not tappable)
+    var prevDays = new Date(year, month, 0).getDate();
     for (var i = 0; i < firstDay; i++) {
       var empty = document.createElement("div");
-      empty.className = "cal-day empty";
+      empty.className = "cal-day other";
+      empty.innerHTML = '<div class="cal-date">' + (prevDays - firstDay + 1 + i) + "</div>";
       frag.appendChild(empty);
     }
 
-    var today = now.getDate();
+    // today = 0 when another month is shown; past days are greyed only in this month or past months
+    var today = isThisMonth ? now.getDate() : (calOffset < 0 ? 99 : 0);
     for (var day = 1; day <= daysInMonth; day++) {
       var cell = document.createElement("div");
-      cell.className = "cal-day" + (day === today ? " today" : "");
+      cell.className = "cal-day" + (isThisMonth && day === today ? " today" : "");
       cell.setAttribute("data-day", day);
       var dateLabel = document.createElement("div");
       dateLabel.className = "cal-date";
@@ -1072,21 +1249,34 @@
       if (dow === 0 || dow === 6) cell.className += " weekend";
       if (day < today) cell.className += " past";
       if (dayEvs.length) cell.className += " has-events";
+      // at most MAX_CELL_EVENTS lines per cell: when there are more, the last line is "+N more"
+      var shown = dayEvs.length > MAX_CELL_EVENTS ? MAX_CELL_EVENTS - 1 : dayEvs.length;
       dayEvs.forEach(function (ev, n) {
-        if (n >= MAX_CELL_EVENTS && dayEvs.length > MAX_CELL_EVENTS + 1) return;
+        if (n >= shown) return;
         var evDiv = document.createElement("div");
         evDiv.className = "cal-event" + (isHolidayEvent(ev) ? " holiday" : "");
         evDiv.textContent = ev.summary || "Untitled";
         cell.appendChild(evDiv);
       });
-      if (dayEvs.length > MAX_CELL_EVENTS + 1) {
+      if (dayEvs.length > shown) {
         var more = document.createElement("div");
         more.className = "cal-more";
-        more.textContent = "+" + (dayEvs.length - MAX_CELL_EVENTS) + " more";
+        more.textContent = "+" + (dayEvs.length - shown) + " more";
         cell.appendChild(more);
       }
       frag.appendChild(cell);
     }
+
+    // trailing days from the next month to finish the last week
+    var cells = firstDay + daysInMonth;
+    for (var t = 1; cells % 7 !== 0; t++, cells++) {
+      var tail = document.createElement("div");
+      tail.className = "cal-day other";
+      tail.innerHTML = '<div class="cal-date">' + t + "</div>";
+      frag.appendChild(tail);
+    }
+    toggleClass(grid, "six-weeks", cells > 35);
+    toggleClass($("cal-today"), "off", isThisMonth);
 
     calDayEvents = eventMap;
     calMonthStart = monthStart;
@@ -1186,7 +1376,7 @@
     each(next, function (ev) {
       var s = parseEventDate(ev);
       var row = document.createElement("div");
-      row.className = "up-event" + (isHolidayEvent(ev) ? " holiday" : "");
+      row.className = "up-event cat-" + eventCategory(ev).key + (isHolidayEvent(ev) ? " holiday" : "");
       var when = document.createElement("span");
       when.className = "up-when";
       when.textContent = s.toLocaleDateString([], { weekday: "short" }) + (ev.start && ev.start.dateTime ? " " + fmtTime(s) : "");
@@ -1221,18 +1411,57 @@
     if (!todays.length) return;
 
     todays.forEach(function (ev) {
+      var cat = eventCategory(ev);
       var div = document.createElement("div");
-      div.className = "today-event" + (isHolidayEvent(ev) ? " holiday" : "");
-      var time = document.createElement("span");
-      time.className = "today-event-time";
-      time.textContent = todayEventTime(ev, dayStart);
-      div.appendChild(time);
+      div.className = "today-event cat-" + cat.key + (isHolidayEvent(ev) ? " holiday" : "");
+      var ic = document.createElement("span");
+      ic.className = "ev-icon";
+      ic.innerHTML = '<svg viewBox="0 0 24 24">' + CAT_ICONS[cat.key] + "</svg>";
+      div.appendChild(ic);
+      var text = document.createElement("span");
+      text.className = "ev-text";
       var title = document.createElement("span");
       title.className = "today-event-title";
       title.textContent = ev.summary || "Untitled";
-      div.appendChild(title);
+      var time = document.createElement("span");
+      time.className = "today-event-time";
+      time.textContent = todayEventTime(ev, dayStart) + " · " + cat.label;
+      text.appendChild(title);
+      text.appendChild(time);
+      div.appendChild(text);
       container.appendChild(div);
     });
+  }
+
+  /*
+   * A colour + icon per event, guessed from its title (Google Calendar's API doesn't give
+   * this calendar's categories). Holidays always use the green holiday style.
+   */
+  var CAT_RULES = [
+    ["celebrate", "Celebration", /birthday|b-?day|anniversary|party|wedding|shower/i],
+    ["home", "Home", /trash|garbage|recycl|grocer|errand|clean|laundry|\bbills?\b|\bpay\b|repair|plumber|delivery/i],
+    ["family", "Kids", /\bkids?\b|daycare|school|class|pick ?up|drop ?off|\bpta\b|teacher|practice|recital|camp|play ?date/i],
+    ["health", "Health", /doctor|dentist|\bdr\.?\s|appt|appointment|clinic|\bvet\b|therapy|check-?up|pediatric|ortho/i],
+    ["work", "Work", /work|meeting|stand-?up|\bsync\b|interview|office|shift|conference|\bcall\b/i],
+    ["social", "Social", /dinner|lunch|brunch|breakfast|movie|game|concert|date night|church|visit/i],
+    ["travel", "Travel", /flight|trip|travel|vacation|hotel|airport/i]
+  ];
+  var CAT_ICONS = {
+    holiday: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
+    celebrate: '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M4 13h16M12 9v11M12 9c-1.5-3.5-5-4-5-1.5S10 9 12 9zm0 0c1.5-3.5 5-4 5-1.5S14 9 12 9z"/>',
+    family: '<path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2c0 .4.3.8.8.8H10v-5.5h4V20h3.7c.5 0 .8-.4.8-.8V9"/>',
+    health: '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/>',
+    work: '<rect x="3.5" y="7.5" width="17" height="12" rx="2.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3.5 12.5h17"/>',
+    social: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+    home: '<path d="M6 7h12l-1 13H7zM4.5 7h15M10 7V4.5h4V7"/>',
+    travel: '<path d="M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5V17l7.5-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-4.5L21 17z"/>',
+    event: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'
+  };
+  function eventCategory(ev) {
+    if (isHolidayEvent(ev)) return { key: "holiday", label: "Holiday" };
+    var t = String(ev.summary || "");
+    for (var i = 0; i < CAT_RULES.length; i++) if (CAT_RULES[i][2].test(t)) return { key: CAT_RULES[i][0], label: CAT_RULES[i][1] };
+    return { key: "event", label: "Event" };
   }
 
   /* ===== PHOTOS / DRIVE ===== */
@@ -1371,8 +1600,20 @@
 
     function hasPhotos() { return ids.length > 0; }
 
-    return { setList: setList, onPageChange: onPageChange, schedule: schedule, hasPhotos: hasPhotos };
+    // Manual prev/next (Home card arrows): show the neighbour now and restart the timer.
+    function step(page, delta) {
+      var s = state[page];
+      if (!s || !ids.length) return;
+      s.errors = 0;
+      show(page, (s.idx + delta + ids.length) % ids.length);
+      schedule();
+    }
+
+    return { setList: setList, onPageChange: onPageChange, schedule: schedule, hasPhotos: hasPhotos, step: step };
   })();
+
+  if ($("ss-prev")) $("ss-prev").addEventListener("click", function (e) { if (e.stopPropagation) e.stopPropagation(); slideshow.step("home", -1); });
+  if ($("ss-next")) $("ss-next").addEventListener("click", function (e) { if (e.stopPropagation) e.stopPropagation(); slideshow.step("home", 1); });
 
   // The photos function returns every image in the shared Drive folder (all pages).
   function driveUrl() { return apiUrl("photos"); }
@@ -1507,8 +1748,46 @@
     }
     setText("home-nowplaying-text", home);
     toggleClass(document.body, "playing", home !== "Not Playing");
+    renderHomePlayer();
     var out = spotify.deviceName() || connectedOutput;
     if (outputText && outputText.textContent !== out) outputText.textContent = out;
+  }
+
+  /*
+   * Home now-playing bar: art, title, artist, progress and prev / play / next.
+   * Spotify (when connected) gives real track info; YouTube shows the video title;
+   * otherwise it mirrors the demo controls.
+   */
+  function renderHomePlayer() {
+    var info = spotify.connected() ? spotify.info() : null;
+    var title = "Not Playing", sub = "Tap to choose Spotify or YouTube", art = "", playing = isPlaying, pos = 0, dur = 0;
+    if (youtube.isPlaying()) {
+      title = "YouTube · " + (youtube.title() || "Playing"); sub = "Playing on this screen"; playing = true;
+    } else if (youtube.hasPlayer() && activeSource === "youtube") {
+      title = "YouTube · " + (youtube.title() || "Paused"); sub = "Paused"; playing = false;
+    } else if (info) {
+      title = info.title || "Nothing playing on Spotify";
+      sub = info.title ? info.artist : "Start something on a phone or speaker";
+      art = info.art; playing = info.playing; pos = info.pos; dur = info.dur;
+    } else if (isPlaying) {
+      title = "Demo Track"; sub = "Demo Artist · " + (activeSource === "youtube" ? "YouTube" : "Spotify");
+    }
+    setText("home-nowplaying-text", title);
+    setText("home-np-sub", sub);
+    var img = $("home-np-art");
+    if (img) {
+      if (art) { if (img.getAttribute("src") !== art) img.setAttribute("src", art); img.style.display = "block"; }
+      else { img.removeAttribute("src"); img.style.display = "none"; }
+    }
+    toggleClass($("home-play"), "paused", !!playing);
+    toggleClass($("home-np-progress"), "show", dur > 0);
+    homeProgress(pos, dur);
+  }
+  function homeProgress(pos, dur) {
+    var bar = $("home-np-bar");
+    if (bar) bar.style.width = (dur ? Math.min(100, pos / dur * 100) : 0).toFixed(2) + "%";
+    setText("home-np-pos", dur ? fmtDuration(pos) : "");
+    setText("home-np-dur", dur ? fmtDuration(dur) : "");
   }
 
   function showMediaPanel(source) {
@@ -1570,6 +1849,28 @@
   });
   if (prevBtn) prevBtn.addEventListener("click", function () { if (spotify.connected()) spotify.command("previous"); });
   if (nextBtn) nextBtn.addEventListener("click", function () { if (spotify.connected()) spotify.command("next"); });
+
+  // Home bar buttons do what the Media page buttons do (YouTube: play/pause the video).
+  function homeCtl(id, fn) { if ($(id)) $(id).addEventListener("click", function (e) { if (e.stopPropagation) e.stopPropagation(); fn(); }); }
+  homeCtl("home-play", function () { if (youtube.isPlaying() || (activeSource === "youtube" && youtube.hasPlayer())) youtube.togglePause(); else if (playBtn) playBtn.click(); });
+  homeCtl("home-prev", function () { if (prevBtn) prevBtn.click(); });
+  homeCtl("home-next", function () { if (nextBtn) nextBtn.click(); });
+
+  // Repeat: Off -> All -> One. Sent to Spotify when connected (Premium), local otherwise.
+  var REPEAT_MODES = ["off", "context", "track"], REPEAT_LABELS = { off: "Off", context: "All", track: "One" };
+  var repeatMode = "off";
+  function paintRepeat(mode) {
+    repeatMode = REPEAT_LABELS[mode] ? mode : "off";
+    setText("repeat-state", REPEAT_LABELS[repeatMode]);
+    var b = $("repeat-btn");
+    toggleClass(b, "on", repeatMode !== "off");
+    if (b) b.setAttribute("aria-label", "Repeat: " + REPEAT_LABELS[repeatMode]);
+  }
+  if ($("repeat-btn")) $("repeat-btn").addEventListener("click", function () {
+    var next = REPEAT_MODES[(REPEAT_MODES.indexOf(repeatMode) + 1) % REPEAT_MODES.length];
+    paintRepeat(next);
+    if (spotify.connected()) spotify.setRepeat(next);
+  });
 
   /* ===== SHA-256 (for Spotify's PKCE sign-in; old WebViews have no crypto.subtle) ===== */
   var sha256 = (function () {
@@ -1937,6 +2238,7 @@
       if (bar) bar.style.width = (dur ? Math.min(100, pos / dur * 100) : 0).toFixed(2) + "%";
       setText("sp-pos", fmtDuration(pos));
       setText("sp-dur", fmtDuration(dur));
+      homeProgress(pos, dur);
     }
 
     function tick() {
@@ -1960,7 +2262,9 @@
       var panel = $("spotify-panel");
       toggleClass(panel, "sp-connected", on);
       if (!on) {
-        if (wrap) wrap.style.display = "none";
+        if (wrap) wrap.style.display = "";
+        setText("sp-pos", "0:00"); setText("sp-dur", "0:00");
+        if ($("sp-progress-bar")) $("sp-progress-bar").style.width = "0%";
         if (art) { art.removeAttribute("src"); art.style.display = "none"; }
         updateNowPlaying();
         return;
@@ -1979,7 +2283,8 @@
         if (src) { if (art.getAttribute("src") !== src) art.setAttribute("src", src); art.style.display = "block"; }
         else { art.removeAttribute("src"); art.style.display = "none"; }
       }
-      if (wrap) wrap.style.display = item ? "block" : "none";
+      if (wrap) wrap.style.display = "";
+      if (state && state.repeat_state) paintRepeat(state.repeat_state);
       renderProgress();
       var dev = state && state.device;
       if (dev && typeof dev.volume_percent === "number" && volumeSlider && activeSource === "spotify" &&
@@ -1990,6 +2295,20 @@
       }
       updateNowPlaying();
       tick();
+    }
+
+    function info() {
+      var item = state && state.item;
+      if (!item) return { title: "", artist: "", art: "", playing: false, pos: 0, dur: 0 };
+      return { title: item.name || "", artist: trackLine(item).split(" · ")[0], art: artUrl(item), playing: !!state.is_playing,
+               pos: progressNow(), dur: item.duration_ms || 0 };
+    }
+
+    function setRepeat(mode) {
+      api("PUT", "/me/player/repeat?state=" + encodeURIComponent(mode), undefined, function (err) {
+        onCommandError(err);
+        schedulePoll(800);
+      });
     }
 
     function homeText() {
@@ -2016,7 +2335,7 @@
 
     return {
       init: init, connected: connected, command: command, togglePlay: togglePlay, setVolume: setVolume,
-      homeText: homeText, deviceName: deviceName,
+      homeText: homeText, deviceName: deviceName, info: info, setRepeat: setRepeat,
       onPageChange: function () { if (connected()) { schedulePoll(currentPage === "media" ? 300 : undefined); tick(); } },
       refresh: function () { if (connected()) poll(); }
     };
@@ -2308,6 +2627,9 @@
       isPlaying: function () { return playing; },
       title: function () { return currentTitle; },
       hasPlayer: function () { return !!(player && ready); },
+      togglePause: function () {
+        try { if (playing) player.pauseVideo(); else player.playVideo(); } catch (e) { /* ignore */ }
+      },
       setVolume: function (v) {
         try { if (v > 0) { player.unMute(); player.setVolume(v); } else player.mute(); } catch (e) { /* ignore */ }
       }

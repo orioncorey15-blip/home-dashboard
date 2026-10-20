@@ -7,13 +7,14 @@
  *   (normal browser caching).
  * Plain ES5 so it parses on old Chrome; only registered where service workers exist.
  */
-var VERSION = "v2";
+var VERSION = "v3";
 var SHELL_CACHE = "dash-shell-" + VERSION;
 var DATA_CACHE = "dash-data-" + VERSION;
 var SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "weather-icons.js", "manifest.json", "icon-192.png", "icon-512.png",
   "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css",
   "fonts/inter-latin-300-normal.woff2", "fonts/inter-latin-400-normal.woff2", "fonts/inter-latin-500-normal.woff2",
-  "fonts/inter-latin-600-normal.woff2", "fonts/inter-latin-700-normal.woff2"];
+  "fonts/inter-latin-600-normal.woff2", "fonts/inter-latin-700-normal.woff2",
+  "fonts/newsreader-latin-400-normal.woff2", "fonts/newsreader-latin-500-normal.woff2"];
 
 self.addEventListener("install", function (event) {
   event.waitUntil(
