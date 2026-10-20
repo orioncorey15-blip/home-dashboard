@@ -609,9 +609,11 @@
     if (!ev.start || !ev.start.dateTime) return "All day";
     var s = parseEventDate(ev), e = parseEventEnd(ev);
     var dayEnd = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate() + 1);
-    var startTxt = s < dayDate ? "Earlier" : fmtTime(s);
-    var endTxt = !e ? "" : (e >= dayEnd ? "later" : fmtTime(new Date(e.getTime() + 1)));
-    return endTxt ? startTxt + " – " + endTxt : startTxt;
+    var endsToday = e && e < dayEnd;
+    var endTxt = endsToday ? fmtTime(new Date(e.getTime() + 1)) : "";
+    // Same wording as the Today card for events that began on an earlier day.
+    if (s < dayDate) return endsToday ? "Until " + endTxt : "All day";
+    return fmtTime(s) + (endsToday ? " – " + endTxt : " – later");
   }
 
   function openDayModal(day) {
