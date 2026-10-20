@@ -393,12 +393,28 @@
     }
   }
 
+  // Forecast failed: say so instead of leaving the hourly/daily rows blank
+  // (or silently showing an old forecast).
+  var forecastAt = 0;
+  function forecastNote(failed) {
+    var note = $("forecast-note");
+    if (!note) return;
+    var text = "";
+    if (failed) {
+      text = forecastAt ? "Forecast couldn't refresh - showing earlier data from " + fmtTime(new Date(forecastAt)) :
+        "Forecast unavailable - retrying automatically";
+    }
+    setText("forecast-note", text);
+    toggleClass(note, "show", !!text);
+  }
+
   var weatherTask = makeTask("Weather", function (done) {
     if (!CFG.WEATHER_API_KEY || !CFG.ZIP) { weatherFailed("Weather not configured"); return done(true); }
     getJSON(owmUrl("weather"), function (err, current) {
       if (err || !current || !current.main) {
         if (window.console) console.error("Weather failed:", err);
         weatherFailed("Weather unavailable");
+        forecastNote(true);
         return done(false);
       }
       renderCurrent(current);
@@ -406,9 +422,12 @@
       getJSON(owmUrl("forecast"), function (err2, forecast) {
         if (err2 || !forecast || !forecast.list) {
           if (window.console) console.error("Forecast failed:", err2);
+          forecastNote(true);
           return done(false);
         }
         renderForecast(forecast);
+        forecastAt = Date.now();
+        forecastNote(false);
         done(true);
       });
     });

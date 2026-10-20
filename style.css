@@ -160,6 +160,8 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 #weather-temp { font-size: 72px; font-weight: 700; }
 .weather-radar { -webkit-flex: 1; flex: 1; display: flex; align-items: center; justify-content: center; color: #aaa; color: var(--muted); }
 .weather-bottom h2 { margin-bottom: 8px; }
+.forecast-note { display: none; background: #3a2f12; color: #ffe082; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px; }
+.forecast-note.show { display: block; }
 .hourly-row, .daily-row { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px; margin-bottom: 12px; }
 .hour, .day { background: #2a2a2a; border-radius: 10px; min-width: 90px; padding: 12px; text-align: center; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .hourly-row > * + *, .daily-row > * + * { margin-left: 12px; }
