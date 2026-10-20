@@ -32,6 +32,10 @@ storage. No web server and no hosting needed.
    Keep the tablet on its charger.
 6. Restart the tablet once to check it boots straight into the dashboard.
 
+Night mode dims the screen. With `NIGHT_MODE_START` / `NIGHT_MODE_END` in `config.js` (default 22 and 6)
+it switches on and off by itself; the button still works and the schedule takes over again at the next
+start/end time. Set both to `null` to turn the schedule off.
+
 The dashboard reloads itself every night at `DAILY_RELOAD_HOUR` (default 3 AM) to free memory.
 Weather refreshes every 10 min and the calendar every 15 min. Everything retries on its own after Wi-Fi drops.
 

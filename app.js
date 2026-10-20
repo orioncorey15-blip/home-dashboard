@@ -177,6 +177,7 @@
   var lastDay = dayKey(new Date());
   var startedAt = Date.now();
   var reloadPending = false;
+  var lastNightCheck = 0;
 
   function updateClock() {
     var now = new Date();
@@ -201,6 +202,10 @@
     }
 
     maybeDailyReload(now);
+    if (now.getSeconds() === 0 || nowMs - lastNightCheck > 61000) {
+      lastNightCheck = nowMs;
+      if (typeof applyNightSchedule === "function") applyNightSchedule(now);
+    }
   }
 
   // Once a day, reload the page to clear any memory build-up in old browsers
@@ -227,14 +232,53 @@
   updateClock();
   setInterval(updateClock, 1000);
 
-  /* ===== NIGHT MODE ===== */
+  /* ===== NIGHT MODE (manual button + optional schedule) ===== */
+  // NIGHT_MODE_START / NIGHT_MODE_END are hours 0-23 (e.g. 22 and 6). null turns the schedule off.
+  // The button always works; the schedule re-applies at the next start/end time.
   var nightBtn = $("night-toggle");
+  function validHour(h) { return typeof h === "number" && h >= 0 && h <= 23 && Math.floor(h) === h; }
+  var NIGHT_START = CFG.NIGHT_MODE_START, NIGHT_END = CFG.NIGHT_MODE_END;
+  var NIGHT_SCHEDULED = validHour(NIGHT_START) && validHour(NIGHT_END) && NIGHT_START !== NIGHT_END;
+
+  function isNightHour(h) {
+    return NIGHT_START < NIGHT_END ? (h >= NIGHT_START && h < NIGHT_END) : (h >= NIGHT_START || h < NIGHT_END);
+  }
+  // Identifies the current scheduled period by its starting boundary (e.g. "night@2026-10-20 22").
+  function nightPeriodKey(now) {
+    var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+    var night = isNightHour(t.getHours());
+    for (var i = 0; i < 48; i++) {
+      var prev = new Date(t.getTime() - 3600000);
+      if (isNightHour(prev.getHours()) !== night) break;
+      t = prev;
+    }
+    return (night ? "night@" : "day@") + dayKey(t) + " " + t.getHours();
+  }
+
   function setNight(on) {
     toggleClass(document.body, "night", on);
     if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
     store.set("nightMode", on);
+    if (NIGHT_SCHEDULED) store.set("nightModePeriod", nightPeriodKey(new Date()));
   }
-  if (store.get("nightMode") === "true") setNight(true);
+
+  var lastNightPeriod = null;
+  function applyNightSchedule(now) {
+    if (!NIGHT_SCHEDULED) return;
+    var key = nightPeriodKey(now);
+    if (key === lastNightPeriod) return;
+    var first = lastNightPeriod === null;
+    lastNightPeriod = key;
+    // On start-up keep a manual choice made earlier in this same period (e.g. across the 3 AM reload).
+    if (first && store.get("nightModePeriod") === key && store.get("nightMode") !== null) {
+      setNight(store.get("nightMode") === "true");
+    } else {
+      setNight(isNightHour(now.getHours()));
+    }
+  }
+
+  if (NIGHT_SCHEDULED) applyNightSchedule(new Date());
+  else if (store.get("nightMode") === "true") setNight(true);
   if (nightBtn) nightBtn.addEventListener("click", function () {
     setNight(!document.body.classList.contains("night"));
   });
