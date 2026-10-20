@@ -561,6 +561,18 @@
     grid.appendChild(frag);
   }
 
+  // "3:00 PM" for timed events starting today, "All day" for all-day events.
+  // A timed event that began on an earlier day shows when it ends today ("Until 11:00 AM"),
+  // or "All day" if it runs through the whole day.
+  function todayEventTime(ev, dayStart) {
+    if (!ev.start || !ev.start.dateTime) return "All day";
+    var s = parseEventDate(ev);
+    if (s >= dayStart) return fmtTime(s);
+    var e = parseEventEnd(ev);
+    var dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 23, 59, 59, 999);
+    return e && e < dayEnd ? "Until " + fmtTime(new Date(e.getTime() + 1)) : "All day";
+  }
+
   function renderToday(events) {
     var container = $("today-events");
     var dateEl = $("today-date");
@@ -585,7 +597,11 @@
     todays.forEach(function (ev) {
       var div = document.createElement("div");
       div.className = "today-event" + (isHolidayEvent(ev) ? " holiday" : "");
-      div.textContent = ev.summary || "Untitled";
+      var time = document.createElement("span");
+      time.className = "today-event-time";
+      time.textContent = todayEventTime(ev, dayStart);
+      div.appendChild(time);
+      div.appendChild(document.createTextNode(ev.summary || "Untitled"));
       container.appendChild(div);
     });
   }
