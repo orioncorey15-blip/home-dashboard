@@ -46,7 +46,7 @@ Key hygiene:
 - The calendar must still be readable by the key (a public calendar). The functions only return what the dashboard
   shows: event titles and times, and photo IDs. Anyone who knows the site address can see those, same as the dashboard.
 - The functions are a **soft barrier, not a login**: they send no CORS headers (other websites' scripts can't read
-  the answers) and refuse requests whose `Origin`/`Referer` is another site. The site's own addresses come from
+  the answers) and refuse requests whose `Origin`/`Referer` is another site (or that a browser marks `Sec-Fetch-Site: cross-site`). The site's own addresses come from
   Netlify's `URL` / `DEPLOY_URL` / `DEPLOY_PRIME_URL` variables (plus localhost under `netlify dev`). A request with no
   Origin/Referer (e.g. `curl`) is still answered, so treat what they return as public.
 - They only return what the dashboard uses: weather is trimmed (no coordinates, city name/ID), calendar items are

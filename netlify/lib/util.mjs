@@ -83,6 +83,10 @@ function isLocal(origin) {
 }
 export function guard(req, vary = [], methods = ["GET", "HEAD"]) {
   if (!methods.includes(req.method)) return fail(405, "Method not allowed", vary);
+  // Browsers always send Sec-Fetch-Site (pages can't drop it the way they can drop
+  // Referer); "cross-site" means another website's page made the request.
+  // Missing (curl, older WebViews) is allowed like a missing Origin.
+  if (req.headers.get("sec-fetch-site") === "cross-site") return fail(403, "Not allowed from this site", vary);
   const ok = allowedOrigins(req);
   for (const h of ["origin", "referer"]) {
     const v = req.headers.get(h);
