@@ -45,7 +45,7 @@ var CONFIG = {
     { title: "Rain", id: "mPZkdNFkNps" }
   ],
 
-  // Weather radar: map centre (roughly the middle of Ashtabula County, ZIP 44004 - not the
+  // Weather radar: map centre (roughly the middle of the county - not the
   // house itself) and zoom (6 = several states, 7 = region, 8 = county).
   RADAR_LAT: 41.86,
   RADAR_LON: -80.79,
