@@ -425,7 +425,7 @@
       if (err || !current || !current.main) {
         if (window.console) console.error("Weather failed:", err);
         weatherFailed(weatherNotConfigured ? "Weather not configured" : "Weather unavailable");
-        forecastNote(true);
+        forecastNote(!weatherNotConfigured); // no "retrying" note when there's nothing to retry
         return done(false);
       }
       renderCurrent(current);
