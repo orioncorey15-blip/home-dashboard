@@ -430,15 +430,16 @@
       }
       renderCurrent(current);
       weatherLoaded = true;
-      getJSON(owmUrl("forecast"), function (err2, forecast) {
+      getJSON(owmUrl("forecast"), function (err2, forecast, meta2) {
         if (err2 || !forecast || !forecast.list) {
           if (window.console) console.error("Forecast failed:", err2);
           forecastNote(true);
           return done(false);
         }
         renderForecast(forecast);
-        if (!meta.offline) { forecastAt = Date.now(); forecastNote(false); }
-        done(!meta.offline); // cached copy while offline: keep retrying
+        var offline = meta.offline || (meta2 && meta2.offline);
+        if (!offline) { forecastAt = Date.now(); forecastNote(false); }
+        done(!offline); // cached copy while offline: keep retrying
       });
     });
   }, 10 * 60 * 1000);
