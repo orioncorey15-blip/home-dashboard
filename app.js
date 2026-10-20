@@ -237,7 +237,9 @@
   // The button always works; the schedule re-applies at the next start/end time.
   var nightBtn = $("night-toggle");
   function validHour(h) { return typeof h === "number" && h >= 0 && h <= 23 && Math.floor(h) === h; }
-  var NIGHT_START = CFG.NIGHT_MODE_START, NIGHT_END = CFG.NIGHT_MODE_END;
+  // Missing keys (e.g. a config.js made before this setting existed) use the documented 22 / 6 default.
+  var NIGHT_START = CFG.NIGHT_MODE_START === undefined ? 22 : CFG.NIGHT_MODE_START;
+  var NIGHT_END = CFG.NIGHT_MODE_END === undefined ? 6 : CFG.NIGHT_MODE_END;
   var NIGHT_SCHEDULED = validHour(NIGHT_START) && validHour(NIGHT_END) && NIGHT_START !== NIGHT_END;
 
   function isNightHour(h) {
