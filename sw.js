@@ -3,13 +3,17 @@
  * - App shell (HTML/CSS/JS/icons): network first (so new deploys show up), cached copy if offline.
  * - Data (/api/...): network first; if offline, the last saved copy is returned with the
  *   header "X-Dashboard-Offline: 1" so the app knows to keep retrying.
- * - Everything else (photos, YouTube, Spotify): not touched (normal browser caching).
+ * - YouTube search and everything else (photos, map/radar tiles, YouTube, Spotify): not touched
+ *   (normal browser caching).
  * Plain ES5 so it parses on old Chrome; only registered where service workers exist.
  */
-var VERSION = "v1";
+var VERSION = "v2";
 var SHELL_CACHE = "dash-shell-" + VERSION;
 var DATA_CACHE = "dash-data-" + VERSION;
-var SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "manifest.json", "icon-192.png", "icon-512.png"];
+var SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "weather-icons.js", "manifest.json", "icon-192.png", "icon-512.png",
+  "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css",
+  "fonts/inter-latin-300-normal.woff2", "fonts/inter-latin-400-normal.woff2", "fonts/inter-latin-500-normal.woff2",
+  "fonts/inter-latin-600-normal.woff2", "fonts/inter-latin-700-normal.woff2"];
 
 self.addEventListener("install", function (event) {
   event.waitUntil(
@@ -71,6 +75,8 @@ self.addEventListener("fetch", function (event) {
   var path = url.href.indexOf(scope) === 0 ? url.href.slice(scope.length).split("?")[0] : null;
   if (path === null) return;
 
+  // YouTube search: always live (an offline copy of old results isn't useful, and it would grow the cache)
+  if (path.indexOf("api/youtube-search") === 0) return;
   if (path.indexOf("api/") === 0) {
     event.respondWith(networkFirst(req, DATA_CACHE, 10000, null, true));
     return;

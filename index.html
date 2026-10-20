@@ -11,8 +11,10 @@
       document.head.appendChild(m);
     }
   </script>
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="style.css">
-  <meta name="theme-color" content="#121212">
+  <meta name="theme-color" content="#0b1020">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="icon" type="image/png" href="icon-192.png">
@@ -20,7 +22,20 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body class="home-active">
+  <!-- Shared SVG gradients for the weather icons. Kept in a visible (0x0) svg: gradients defined
+       inside a display:none element don't paint in old Chrome/WebView. -->
+  <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+      <radialGradient id="wxg-sun" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#fff3b0"/><stop offset=".55" stop-color="#ffc83d"/><stop offset="1" stop-color="#ff9d2e"/></radialGradient>
+      <linearGradient id="wxg-moon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdf6d8"/><stop offset="1" stop-color="#cfc6a8"/></linearGradient>
+      <linearGradient id="wxg-cloud" gradientUnits="userSpaceOnUse" x1="0" y1="17" x2="0" y2="46"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d5dee9"/></linearGradient>
+      <linearGradient id="wxg-cloud-dark" gradientUnits="userSpaceOnUse" x1="0" y1="17" x2="0" y2="46"><stop offset="0" stop-color="#aab6c6"/><stop offset="1" stop-color="#76849a"/></linearGradient>
+      <linearGradient id="wxg-bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe680"/><stop offset="1" stop-color="#ffb300"/></linearGradient>
+    </defs>
+  </svg>
+
   <header id="header">
+    <div id="page-title" class="page-title"></div>
     <div id="clock">
       <div class="time" id="time"></div>
       <div class="date" id="date"></div>
@@ -28,21 +43,27 @@
   </header>
 
   <div id="container">
-    <nav id="sidebar">
+    <nav id="sidebar" aria-label="Pages">
+      <div class="nav-brand" aria-hidden="true"><span></span></div>
       <button class="nav-btn active" data-page="home" aria-label="Home">
-        <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2c0 .4.3.8.8.8H10v-5.5h4V20h3.7c.5 0 .8-.4.8-.8V9"/></svg>
+        <span class="nav-label">Home</span>
       </button>
       <button class="nav-btn" data-page="calendar" aria-label="Calendar">
-        <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="dot" cx="8.5" cy="14.5" r="1.2"/><circle class="dot" cx="12" cy="14.5" r="1.2"/></svg>
+        <span class="nav-label">Calendar</span>
       </button>
       <button class="nav-btn" data-page="weather" aria-label="Weather">
-        <svg viewBox="0 0 24 24"><path d="M6.5 20q-2.3 0-3.9-1.6T1 14.5q0-1.9 1.2-3.3T5.3 9.3q.5-2.2 2.2-3.6T11.5 4q2.5 0 4.3 1.6t2.1 4q1.9.3 3.1 1.7t1.2 3.2q0 2.1-1.5 3.5T17.5 20z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M7 18.5h10.2a3.8 3.8 0 0 0 .4-7.6 5.5 5.5 0 0 0-10.6-1A4.3 4.3 0 0 0 7 18.5z"/></svg>
+        <span class="nav-label">Weather</span>
       </button>
       <button class="nav-btn" data-page="media" aria-label="Media">
-        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M9 17.5V5.5l11-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>
+        <span class="nav-label">Media</span>
       </button>
       <button class="nav-btn" data-page="photos" aria-label="Photos">
-        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5z"/></svg>
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="9.5" r="1.8"/><path d="m4 17 5-4.5 3.5 3 3-2.5L20 17"/></svg>
+        <span class="nav-label">Photos</span>
       </button>
     </nav>
 
@@ -52,86 +73,150 @@
         <button id="menuToggle" aria-label="Menu">☰</button>
         <div class="home-grid">
           <div class="card home-clock">
-            <div class="clock-time" id="home-time"></div>
-            <div class="clock-date" id="home-date"></div>
+            <div class="clock-main">
+              <div class="clock-time" id="home-time"></div>
+              <div class="clock-date" id="home-date"></div>
+            </div>
+            <div class="home-night">
+              <button id="night-toggle" class="night-btn" aria-label="Night mode">
+                <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+                <span id="night-label">Night</span>
+              </button>
+            </div>
           </div>
 
-          <div class="card home-weather">
+          <div class="card home-weather wx-card" id="home-weather">
+            <div class="wx-glow" aria-hidden="true"></div>
             <div class="home-weather-top">
-              <div class="home-temp" id="home-temp">--°</div>
-              <div class="home-desc" id="home-desc">Loading…</div>
-              <div class="home-feels" id="home-feels"></div>
+              <div class="wx-icon home-wx-icon" id="home-wx-icon"></div>
+              <div class="home-weather-main">
+                <div class="home-temp" id="home-temp">--°</div>
+                <div class="home-desc" id="home-desc">Loading…</div>
+              </div>
             </div>
+            <div class="home-feels"><span id="home-feels"></span><span class="hilo" id="home-hilo"></span></div>
             <div class="home-weather-bottom">
-              <div class="weather-col">
-                <div class="stat"><span class="label">Humidity</span><span id="home-humidity"></span></div>
-                <div class="stat"><span class="label">Wind</span><span id="home-wind"></span></div>
-                <div class="stat"><span class="label">Visibility</span><span id="home-visibility"></span></div>
-              </div>
-              <div class="weather-col">
-                <div class="stat"><span class="label">Sunrise</span><span id="home-sunrise"></span></div>
-                <div class="stat"><span class="label">Sunset</span><span id="home-sunset"></span></div>
-              </div>
+              <div class="chip"><span class="chip-label">Wind</span><span class="chip-value" id="home-wind">--</span></div>
+              <div class="chip"><span class="chip-label">Humidity</span><span class="chip-value" id="home-humidity">--</span></div>
+              <div class="chip"><span class="chip-label">Sunrise</span><span class="chip-value" id="home-sunrise">--</span></div>
+              <div class="chip"><span class="chip-label">Sunset</span><span class="chip-value" id="home-sunset">--</span></div>
             </div>
+            <button class="home-radar" id="home-radar" aria-label="Open the weather radar">
+              <div class="radar-map" id="home-radar-map"></div>
+              <div class="home-radar-label"><span class="live-dot"></span>Radar<span class="home-radar-time" id="home-radar-time"></span></div>
+              <div class="home-radar-open">Tap to expand</div>
+            </button>
           </div>
 
           <div class="card home-today">
-            <div class="today-header">
-              <div class="today-label">TODAY</div>
-              <div class="today-date" id="today-date"></div>
+            <div class="card-head">
+              <div>
+                <div class="eyebrow today-label">Today</div>
+                <div class="today-date" id="today-date"></div>
+              </div>
+              <div class="card-head-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+              </div>
             </div>
-            <div id="today-events" class="today-events"></div>
+            <div class="today-scroll">
+              <div id="today-events" class="today-events"></div>
+              <div class="upcoming" id="upcoming">
+                <div class="eyebrow">Coming up</div>
+                <div id="upcoming-events"></div>
+              </div>
+            </div>
           </div>
 
           <div class="card slideshow-card">
             <div class="home-slideshow">
               <img id="home-slideshow-img" alt="Photo" referrerpolicy="no-referrer" />
             </div>
+            <div class="slideshow-shade" aria-hidden="true"></div>
             <div class="photo-empty" id="home-photo-empty"></div>
           </div>
 
-          <div class="card home-nowplaying">
-            <div class="nowplaying-label">NOW PLAYING</div>
-            <div id="home-nowplaying-text">Not Playing</div>
-          </div>
-
-          <div class="card home-night">
-            <button id="night-toggle" class="night-btn">Night Mode</button>
+          <div class="card home-nowplaying" id="home-nowplaying" role="button" tabindex="0" aria-label="Open Media">
+            <div class="np-icon" aria-hidden="true">
+              <span class="eq"><i></i><i></i><i></i><i></i></span>
+            </div>
+            <div class="np-text">
+              <div class="eyebrow nowplaying-label">Now playing</div>
+              <div id="home-nowplaying-text">Not Playing</div>
+            </div>
+            <div class="np-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
           </div>
         </div>
       </section>
 
       <!-- CALENDAR -->
       <section class="page" id="calendar">
-        <h2 id="cal-title" class="cal-title"></h2>
+        <div class="cal-head">
+          <h2 id="cal-title" class="cal-title"></h2>
+          <div class="cal-legend">
+            <span><i class="lg lg-event"></i>Events</span>
+            <span><i class="lg lg-holiday"></i>Holidays</span>
+            <span class="cal-hint">Tap a day for details</span>
+          </div>
+        </div>
         <div id="calendar-grid" class="calendar-grid"></div>
       </section>
 
       <!-- WEATHER -->
       <section class="page" id="weather">
-        <div class="weather-top">
-          <div class="weather-current card">
+        <div class="weather-layout">
+          <div class="card weather-current wx-card" id="weather-hero">
+            <div class="wx-glow" aria-hidden="true"></div>
             <div class="current-left">
-              <div id="weather-temp">--°</div>
-              <div id="weather-desc">Loading…</div>
-              <div id="weather-feels"></div>
+              <div class="wx-icon weather-icon" id="weather-icon"></div>
+              <div>
+                <div id="weather-temp">--°</div>
+                <div id="weather-desc">Loading…</div>
+                <div class="weather-sub"><span id="weather-feels"></span><span class="hilo" id="weather-hilo"></span></div>
+              </div>
             </div>
             <div class="current-right">
-              <div class="stat"><span class="label">Humidity</span><span id="weather-humidity"></span></div>
-              <div class="stat"><span class="label">Wind</span><span id="weather-wind"></span></div>
-              <div class="stat"><span class="label">Visibility</span><span id="weather-visibility"></span></div>
+              <div class="stat-tile"><span class="label">Wind</span><span class="value" id="weather-wind">--</span><span class="sub" id="weather-gust"></span></div>
+              <div class="stat-tile"><span class="label">Humidity</span><span class="value" id="weather-humidity">--</span><span class="sub" id="weather-clouds"></span></div>
+              <div class="stat-tile"><span class="label">Pressure</span><span class="value" id="weather-pressure">--</span><span class="sub">inHg</span></div>
+              <div class="stat-tile"><span class="label">Visibility</span><span class="value" id="weather-visibility">--</span><span class="sub"></span></div>
+              <div class="stat-tile"><span class="label">Sunrise</span><span class="value" id="weather-sunrise">--</span><span class="sub" id="weather-daylight"></span></div>
+              <div class="stat-tile"><span class="label">Sunset</span><span class="value" id="weather-sunset">--</span><span class="sub" id="weather-sunset-in"></span></div>
             </div>
           </div>
+
           <div class="card weather-radar">
-            <div id="radar-container">Radar not available</div>
+            <div id="radar-container" class="radar-map"></div>
+            <div class="radar-overlay-top">
+              <div class="radar-badge"><span class="live-dot"></span>Live radar</div>
+              <div class="radar-tools">
+                <button class="radar-tool" id="radar-zoom-in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
+                <button class="radar-tool" id="radar-zoom-out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+                <button class="radar-tool" id="radar-recenter" aria-label="Recenter radar">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="radar-controls">
+              <button class="radar-play" id="radar-play" aria-label="Pause radar">
+                <svg viewBox="0 0 24 24" class="i-pause"><rect x="7" y="5.5" width="3.6" height="13" rx="1"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1"/></svg>
+                <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+              </button>
+              <div class="radar-track"><div class="radar-ticks" id="radar-ticks"></div></div>
+              <div class="radar-time" id="radar-time">--</div>
+            </div>
+            <div class="radar-msg" id="radar-msg"></div>
           </div>
-        </div>
-        <div class="weather-bottom">
-          <div id="forecast-note" class="forecast-note"></div>
-          <h2>24 Hours</h2>
-          <div id="hourly" class="hourly-row"></div>
-          <h2>5 Day</h2>
-          <div id="daily" class="daily-row"></div>
+
+          <div class="card weather-hourly">
+            <div class="section-head"><h2>Next 24 hours</h2><span class="section-note" id="weather-updated"></span></div>
+            <div id="forecast-note" class="forecast-note"></div>
+            <div id="hourly" class="hourly-row"></div>
+          </div>
+
+          <div class="card weather-daily">
+            <div class="section-head"><h2>5-day forecast</h2></div>
+            <div id="daily" class="daily-row"></div>
+          </div>
         </div>
       </section>
 
@@ -141,48 +226,79 @@
           <div class="card media-nowplaying">
             <!-- SPOTIFY (or demo controls when Spotify isn't connected) -->
             <div class="media-panel" id="spotify-panel">
-              <div class="album-art"><img id="sp-art" alt="" referrerpolicy="no-referrer"><span class="album-art-label">Album Art</span></div>
-              <div class="now-playing">
-                <strong id="play-status">Not Playing</strong><br>
-                <span id="track-info">Artist · Album</span>
-              </div>
-              <div class="sp-progress-wrap" id="sp-progress-wrap">
-                <div class="sp-progress"><div class="sp-progress-bar" id="sp-progress-bar"></div></div>
-                <div class="sp-times"><span id="sp-pos">0:00</span><span id="sp-dur">0:00</span></div>
-              </div>
-              <div class="media-controls">
-                <button class="icon-btn" id="prev-btn" aria-label="Previous">
-                  <svg viewBox="0 0 24 24"><polygon points="15,6 9,12 15,18"></polygon><rect x="6" y="6" width="2" height="12"></rect></svg>
-                </button>
-                <button class="icon-btn play" id="play-btn" aria-label="Play / Pause">
-                  <svg viewBox="0 0 24 24" class="play-icon"><polygon points="8,5 19,12 8,19"></polygon></svg>
-                  <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5" width="4" height="14"></rect><rect x="13" y="5" width="4" height="14"></rect></svg>
-                </button>
-                <button class="icon-btn" id="next-btn" aria-label="Next">
-                  <svg viewBox="0 0 24 24"><polygon points="9,6 15,12 9,18"></polygon><rect x="16" y="6" width="2" height="12"></rect></svg>
-                </button>
-              </div>
-              <div class="sp-message" id="sp-message"></div>
-              <div class="demo-note" id="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
-              <div class="sp-account">
-                <button class="sp-connect-btn" id="sp-connect" style="display:none">Connect Spotify</button>
-                <button class="link-btn" id="sp-disconnect" style="display:none">Disconnect Spotify</button>
+              <div class="album-art"><img id="sp-art" alt="" referrerpolicy="no-referrer"><span class="album-art-label">
+                <svg viewBox="0 0 24 24"><path d="M9 17.5V5.5l11-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg></span></div>
+              <div class="sp-side">
+                <div class="now-playing">
+                  <div class="eyebrow">Spotify</div>
+                  <strong id="play-status">Not Playing</strong>
+                  <span id="track-info">Artist · Album</span>
+                </div>
+                <div class="sp-progress-wrap" id="sp-progress-wrap">
+                  <div class="sp-progress"><div class="sp-progress-bar" id="sp-progress-bar"></div></div>
+                  <div class="sp-times"><span id="sp-pos">0:00</span><span id="sp-dur">0:00</span></div>
+                </div>
+                <div class="media-controls">
+                  <button class="icon-btn" id="prev-btn" aria-label="Previous">
+                    <svg viewBox="0 0 24 24"><path d="M17.5 6v12L9 12z"/><rect x="6" y="6" width="2.4" height="12" rx="1"/></svg>
+                  </button>
+                  <button class="icon-btn play" id="play-btn" aria-label="Play / Pause">
+                    <svg viewBox="0 0 24 24" class="play-icon"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+                    <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5.5" width="3.6" height="13" rx="1"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1"/></svg>
+                  </button>
+                  <button class="icon-btn" id="next-btn" aria-label="Next">
+                    <svg viewBox="0 0 24 24"><path d="M6.5 6v12L15 12z"/><rect x="15.6" y="6" width="2.4" height="12" rx="1"/></svg>
+                  </button>
+                </div>
+                <div class="sp-message" id="sp-message"></div>
+                <div class="demo-note" id="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
+                <div class="sp-account">
+                  <button class="sp-connect-btn" id="sp-connect" style="display:none">Connect Spotify</button>
+                  <button class="link-btn" id="sp-disconnect" style="display:none">Disconnect Spotify</button>
+                </div>
               </div>
             </div>
 
             <!-- YOUTUBE -->
             <div class="media-panel" id="youtube-panel" style="display:none">
               <div class="yt-bar">
-                <input type="text" id="yt-input" placeholder="Paste a YouTube link or video ID" autocomplete="off" autocapitalize="off" spellcheck="false">
-                <button class="yt-btn" id="yt-go">Play</button>
+                <form class="yt-field yt-search-field" id="yt-search-form" action="#" onsubmit="return false">
+                  <svg viewBox="0 0 24 24" class="yt-field-icon"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+                  <input type="search" id="yt-search" placeholder="Search YouTube" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" enterkeyhint="search">
+                  <button type="button" class="yt-btn" id="yt-search-go">Search</button>
+                </form>
+                <div class="yt-field yt-link-field">
+                  <svg viewBox="0 0 24 24" class="yt-field-icon"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+                  <input type="text" id="yt-input" placeholder="Paste a link or video ID" autocomplete="off" autocapitalize="off" spellcheck="false">
+                  <button class="yt-btn yt-btn-ghost" id="yt-go">Play</button>
+                </div>
               </div>
               <div class="yt-favs" id="yt-favs"></div>
               <div class="yt-player-wrap" id="yt-wrap">
                 <div id="yt-player"></div>
-                <div class="yt-placeholder" id="yt-placeholder">Pick a favourite or paste a link</div>
+                <div class="yt-placeholder" id="yt-placeholder">
+                  <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" class="fill"/></svg>
+                  <span>Search, pick a favourite or paste a link</span>
+                </div>
                 <div class="yt-tools">
-                  <button class="yt-tool" id="yt-fs" aria-label="Fullscreen">⛶</button>
-                  <button class="yt-tool" id="yt-stop" aria-label="Stop">✕</button>
+                  <button class="yt-tool" id="yt-results-open" aria-label="Back to search results" style="display:none">
+                    <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+                  </button>
+                  <button class="yt-tool" id="yt-fs" aria-label="Fullscreen">
+                    <svg viewBox="0 0 24 24"><path d="M4 9V5.5C4 4.7 4.7 4 5.5 4H9M15 4h3.5c.8 0 1.5.7 1.5 1.5V9M20 15v3.5c0 .8-.7 1.5-1.5 1.5H15M9 20H5.5C4.7 20 4 19.3 4 18.5V15"/></svg>
+                  </button>
+                  <button class="yt-tool" id="yt-stop" aria-label="Stop">
+                    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                  </button>
+                </div>
+                <div class="yt-results" id="yt-results" style="display:none">
+                  <div class="yt-results-head">
+                    <div class="yt-results-title" id="yt-results-title">Results</div>
+                    <button class="yt-results-close" id="yt-results-close" aria-label="Close results">
+                      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                    </button>
+                  </div>
+                  <div class="yt-results-grid" id="yt-results-grid"></div>
                 </div>
               </div>
               <div class="yt-msg" id="yt-msg"></div>
@@ -191,17 +307,21 @@
 
           <div class="media-shortcuts">
             <button class="shortcut-btn active" data-source="spotify" title="Spotify">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 9.2c3.4-1 7.4-.6 10.4 1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M7.8 12c2.8-.8 6.1-.5 8.6 1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8.6 14.6c2.2-.6 4.6-.4 6.4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M7.2 9.4c3.3-1 7-.6 9.8 1.1M7.9 12.2c2.7-.8 5.8-.5 8.2.9M8.6 14.9c2.1-.6 4.4-.4 6.1.6"/></svg>
+              <span>Spotify</span>
             </button>
             <button class="shortcut-btn" data-source="youtube" title="YouTube">
-              <svg viewBox="0 0 24 24"><path d="M23.5 6.2s-.2-1.7-.8-2.5c-.8-.9-1.7-.9-2.1-1C17.7 2.4 12 2.4 12 2.4s-5.7 0-8.6.3c-.4.1-1.3.1-2.1 1-.6.8-.8 2.5-.8 2.5S0 8.2 0 10.1v1.8c0 1.9.2 3.9.2 3.9s.2 1.7.8 2.5c.8.9 1.9.9 2.4 1 1.7.2 7.6.3 8.6.3s5.7 0 8.6-.3c.4-.1 1.3-.1 2.1-1 .6-.8.8-2.5.8-2.5s.2-2 .2-3.9v-1.8c0-1.9-.2-3.9-.2-3.9zM9.75 14.5V7.5l6 3.5-6 3.5z"/></svg>
+              <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" class="fill"/></svg>
+              <span>YouTube</span>
             </button>
             <button class="shortcut-btn" data-source="bluetooth" title="Bluetooth">
-              <svg viewBox="0 0 24 24"><path d="M12 2l4.5 4.5-3.5 3.5 3.5 3.5L12 18V11l-4 4-1.5-1.5 4.5-4.5-4.5-4.5L8 4l4 4V2z"/></svg>
+              <svg viewBox="0 0 24 24"><path d="m7 7.5 10 9L12 21V3l5 4.5-10 9"/></svg>
+              <span>Bluetooth</span>
             </button>
           </div>
 
           <div class="card media-volume">
+            <svg viewBox="0 0 24 24" class="vol-icon"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
             <div class="volume-slider-wrap">
               <input type="range" min="0" max="100" value="60" class="volume-slider" aria-label="Volume">
             </div>
@@ -218,7 +338,8 @@
       <!-- BLUETOOTH HOW-TO (shown when the button can't open settings by itself) -->
       <div class="bt-help" id="bt-help" role="dialog" aria-modal="true" aria-label="Bluetooth help" style="display:none">
         <div class="card bt-help-card">
-          <h3>Bluetooth</h3>
+          <div class="bt-help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 7.5 10 9L12 21V3l5 4.5-10 9"/></svg></div>
+          <h3>Connect a speaker</h3>
           <p>To connect a speaker: swipe down from the top of the screen and long-press the <b>Bluetooth</b> icon,
              or open <b>Settings → Connections → Bluetooth</b>.</p>
           <p class="bt-help-small">Want this button to open Bluetooth settings directly? In Fully Kiosk turn on
@@ -233,7 +354,8 @@
 
       <!-- PHOTOS -->
       <section class="page" id="photos">
-        <button id="fs-btn" aria-label="Fullscreen" style="display:none">⛶</button>
+        <button id="fs-btn" aria-label="Fullscreen" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9V5.5C4 4.7 4.7 4 5.5 4H9M15 4h3.5c.8 0 1.5.7 1.5 1.5V9M20 15v3.5c0 .8-.7 1.5-1.5 1.5H15M9 20H5.5C4.7 20 4 19.3 4 18.5V15"/></svg></button>
+        <div class="photo-frame-bg" id="photo-frame-bg" aria-hidden="true"></div>
         <div class="photo-frame">
           <img id="photo-frame-img" alt="Photo Frame" referrerpolicy="no-referrer">
         </div>
@@ -257,6 +379,8 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="weather-icons.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

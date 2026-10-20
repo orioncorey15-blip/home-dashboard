@@ -5,10 +5,13 @@ YouTube, Spotify and a Bluetooth button). It is hosted free on **Netlify**, and 
 site's https address in Fully Kiosk Browser.
 
 API keys are **never** in the browser: small Netlify Functions (`netlify/functions/`) hold them as
-environment variables and the page only calls `/api/weather`, `/api/calendar` and `/api/photos`.
+environment variables and the page only calls `/api/weather`, `/api/calendar`, `/api/photos` and `/api/youtube-search`.
 
 ## Files
 - `index.html`, `style.css`, `app.js`: the dashboard. Plain ES5 JavaScript, so it works on old Android WebViews.
+  `style.css` starts with the design tokens (colours, type scale, spacing, card style) used by every page.
+- `weather-icons.js`: the animated SVG weather icons (bundled, no icon CDN).
+- `vendor/leaflet/` (Leaflet 1.9.4, BSD-2) and `fonts/` (Inter, SIL OFL): bundled so nothing depends on a CDN.
 - `config.js`: public settings only (night-mode hours, slideshow speed, Spotify client ID, YouTube favourites…).
   **Never put a key in it**: everything in it is visible to anyone who opens the site.
 - `sw.js`: service worker. Keeps a copy of the app and the last data, so the dashboard still opens if Wi-Fi
@@ -98,6 +101,18 @@ the dashboard is a remote, not a player. It checks every ~5 s while the Media or
 Media → YouTube button: paste a link (youtu.be/…, youtube.com/watch?v=…, shorts, live) or a video ID, or tap a favourite
 (`YOUTUBE_FAVORITES` in `config.js`). ⛶ makes it fullscreen, ✕ stops it. Some videos (e.g. many music videos and the
 Lofi Girl live radio) are blocked from playing outside youtube.com by their owners; the dashboard says so.
+
+**Search**: type in the search box and tap Search (or Enter). Results come from `/api/youtube-search`, which calls the
+YouTube Data API v3 with the server-side `GOOGLE_API_KEY` (the key needs "YouTube Data API v3" enabled in Google Cloud).
+Only embeddable videos are returned (safe search: moderate). Each search costs 100 of the 10,000 free daily quota
+units, so about 100 searches a day; repeated searches are cached for 6 hours. When the quota runs out the panel says
+so and favourites/links keep working.
+
+## Weather radar
+The Weather page shows an animated radar loop (last 55 minutes, 5-minute steps) centred on `RADAR_LAT`/`RADAR_LON`
+in `config.js`; a small live preview sits on the Home weather card (tap it to open the big one). Sources, all free and
+key-less: NWS NEXRAD composite tiles from the Iowa Environmental Mesonet (falls back to RainViewer automatically),
+on Esri's Dark Gray Canvas base map (falls back to OpenStreetMap). The map library (Leaflet) is bundled.
 
 ## 5. Bluetooth button
 A web page can't pair a speaker, but it can open Android's Bluetooth settings:

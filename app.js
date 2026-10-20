@@ -65,7 +65,10 @@
       done = true;
       xhr.onload = xhr.onerror = xhr.ontimeout = xhr.onabort = null;
       var offline = false;
-      try { offline = xhr.getResponseHeader("X-Dashboard-Offline") === "1"; } catch (e) { /* ignore */ }
+      // (only our own /api replies carry it; asking a cross-origin reply logs a console error)
+      if (/^\//.test(url) || url.indexOf(API_BASE) === 0) {
+        try { offline = xhr.getResponseHeader("X-Dashboard-Offline") === "1"; } catch (e) { /* ignore */ }
+      }
       cb(err, data, { offline: offline });
     }
     try {
@@ -156,6 +159,7 @@
     });
 
     toggleClass(document.body, "home-active", pageId === "home");
+    document.body.setAttribute("data-page", pageId);
     toggleClass($("sidebar"), "open", false); // any nav tap (incl. Home) closes the slide-out menu
     closeDayModal();
 
@@ -166,7 +170,10 @@
     // then let the (single) slideshow timer take over.
     slideshow.onPageChange();
     if (typeof spotify !== "undefined" && spotify) spotify.onPageChange();
+    setText("page-title", PAGE_TITLES[pageId] || "");
+    if (typeof radar !== "undefined" && radar) radar.onPageChange();
   }
+  var PAGE_TITLES = { home: "Home", calendar: "Calendar", weather: "Weather", media: "Media", photos: "Photos" };
 
   each(document.querySelectorAll(".nav-btn"), function (btn) {
     btn.addEventListener("click", function () { showPage(btn.getAttribute("data-page")); });
@@ -185,6 +192,14 @@
   var homeGrid = document.querySelector(".home-grid");
   if (homeGrid) homeGrid.addEventListener("click", function () { toggleClass($("sidebar"), "open", false); });
 
+  // The Home "now playing" card opens the Media page.
+  (function () {
+    var np = $("home-nowplaying");
+    if (!np) return;
+    np.addEventListener("click", function (e) { if (e.stopPropagation) e.stopPropagation(); showPage("media"); });
+    np.addEventListener("keydown", function (e) { if (e.keyCode === 13 || e.keyCode === 32) showPage("media"); });
+  })();
+
   /* ===== CLOCK (+ day-change / wake-from-sleep detection) ===== */
   var lastTick = Date.now();
   var lastDay = dayKey(new Date());
@@ -192,12 +207,27 @@
   var reloadPending = false;
   var lastNightCheck = 0;
 
+  // Big clock: "6:52" with a smaller "PM".
+  function setClock(id, str) {
+    var e = $(id);
+    if (!e || e.getAttribute("data-t") === str) return;
+    e.setAttribute("data-t", str);
+    var m = str.match(/^(.*?)\s*([AaPp]\.?\s?[Mm]\.?)$/);
+    if (!m) { e.textContent = str; return; }
+    e.innerHTML = "";
+    e.appendChild(document.createTextNode(m[1]));
+    var ap = document.createElement("span");
+    ap.className = "ampm";
+    ap.textContent = m[2];
+    e.appendChild(ap);
+  }
+
   function updateClock() {
     var now = new Date();
     var timeStr = fmtTime(now);
     var dateStr = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
-    setText("home-time", timeStr);
-    setText("home-date", dateStr);
+    setClock("home-time", timeStr);
+    setText("home-date", now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
     setText("time", timeStr);
     setText("date", dateStr);
 
@@ -272,7 +302,9 @@
 
   function setNight(on) {
     toggleClass(document.body, "night", on);
-    if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
+    if ($("night-label")) setText("night-label", on ? "Night on" : "Night");
+    else if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
+    toggleClass(nightBtn, "on", on);
     store.set("nightMode", on);
     if (NIGHT_SCHEDULED) store.set("nightModePeriod", nightPeriodKey(new Date()));
   }
@@ -300,6 +332,8 @@
 
   /* ===== WEATHER ===== */
   var weatherLoaded = false;
+  var WX = window.WxIcons || null;      // weather-icons.js (missing = text only)
+  var lastCurrent = null, lastForecast = null;
 
   function windDir(deg) {
     if (typeof deg !== "number" || isNaN(deg)) return "";
@@ -315,58 +349,134 @@
     return ((f.rain && f.rain["3h"]) || 0) + ((f.snow && f.snow["3h"]) || 0);
   }
 
-  function makeTile(cls, label, main, sub) {
-    var box = document.createElement("div");
-    box.className = cls;
-    var a = document.createElement("div"); a.textContent = label;
-    var b = document.createElement("div"); b.style.fontWeight = "600"; b.textContent = main;
-    var c = document.createElement("div"); c.style.fontSize = "12px"; c.style.opacity = "0.7"; c.textContent = sub;
-    box.appendChild(a); box.appendChild(b); box.appendChild(c);
-    return box;
+  function num(v) { return typeof v === "number" && isFinite(v); }
+  function deg(v) { return num(v) ? Math.round(v) + "°" : "--°"; }
+  function capFirst(t) { t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); }
+  function wxOf(f) { return (f && f.weather && f.weather[0]) || {}; }
+  function wxKind(f) { var w = wxOf(f); return WX ? WX.kind(w.icon, w.main) : ""; }
+
+  function setIcon(id, kind, animate) {
+    var el = $(id);
+    if (!el || !WX) return;
+    var key = kind + (animate ? ":a" : "");
+    if (el.getAttribute("data-kind") === key) return; // don't restart animations needlessly
+    el.setAttribute("data-kind", key);
+    el.innerHTML = WX.svg(kind, animate);
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+
+  // Today's high / low: forecast slots for today plus the current reading.
+  function todayHiLo() {
+    var temps = [];
+    if (lastCurrent && lastCurrent.main && num(lastCurrent.main.temp)) temps.push(lastCurrent.main.temp);
+    var today = dayKey(new Date());
+    each((lastForecast && lastForecast.list) || [], function (f) {
+      if (f && f.main && num(f.main.temp) && dayKey(new Date(f.dt * 1000)) === today) temps.push(f.main.temp);
+    });
+    if (temps.length < 2 && lastCurrent && lastCurrent.main) {
+      if (num(lastCurrent.main.temp_max)) temps.push(lastCurrent.main.temp_max);
+      if (num(lastCurrent.main.temp_min)) temps.push(lastCurrent.main.temp_min);
+    }
+    if (!temps.length) return "";
+    return "H " + Math.round(Math.max.apply(null, temps)) + "°  L " + Math.round(Math.min.apply(null, temps)) + "°";
+  }
+
+  function isNightNow(current) {
+    var sys = (current && current.sys) || {}, now = Date.now() / 1000;
+    if (num(sys.sunrise) && num(sys.sunset)) return now < sys.sunrise || now > sys.sunset;
+    var icon = wxOf(current).icon;
+    return !!(icon && icon.charAt(2) === "n");
   }
 
   function renderCurrent(current) {
+    lastCurrent = current;
     var main = current.main || {};
     var wind = current.wind || {};
     var sys = current.sys || {};
-    var temp = Math.round(main.temp) + "°";
-    var feels = "Feels like " + Math.round(main.feels_like) + "°";
-    var desc = (current.weather && current.weather[0] && current.weather[0].description) || "";
-    var humidity = main.humidity !== undefined ? main.humidity + "%" : "--";
-    var speed = wind.speed !== undefined ? Math.round(wind.speed) + " mph" : "--";
-    var vis = typeof current.visibility === "number" ? (current.visibility / 1609).toFixed(1) + " mi" : "--";
+    var temp = deg(main.temp);
+    var feels = num(main.feels_like) ? "Feels like " + Math.round(main.feels_like) + "°" : "";
+    var desc = capFirst(wxOf(current).description || wxOf(current).main || "");
+    var humidity = num(main.humidity) ? main.humidity + "%" : "--";
+    var speed = num(wind.speed) ? Math.round(wind.speed) + " mph" : "--";
+    var dir = windDir(wind.deg);
+    var vis = num(current.visibility) ? (current.visibility >= 16000 ? "10+ mi" : (current.visibility / 1609).toFixed(1) + " mi") : "--";
+    var rise = num(sys.sunrise) ? fmtTime(new Date(sys.sunrise * 1000)) : "--";
+    var set = num(sys.sunset) ? fmtTime(new Date(sys.sunset * 1000)) : "--";
+
+    var kind = wxKind(current);
+    if (WX) {
+      var theme = WX.theme(kind, isNightNow(current));
+      if (document.body.getAttribute("data-wx") !== theme) document.body.setAttribute("data-wx", theme);
+    }
+    setIcon("home-wx-icon", kind, true);
+    setIcon("weather-icon", kind, true);
 
     setText("home-temp", temp);
     setText("home-desc", desc);
     setText("home-feels", feels);
     setText("home-humidity", humidity);
-    setText("home-wind", speed);
+    setText("home-wind", (dir ? dir + " " : "") + speed);
     setText("home-visibility", vis);
-    setText("home-sunrise", sys.sunrise ? fmtTime(new Date(sys.sunrise * 1000)) : "--");
-    setText("home-sunset", sys.sunset ? fmtTime(new Date(sys.sunset * 1000)) : "--");
+    setText("home-sunrise", rise);
+    setText("home-sunset", set);
 
     setText("weather-temp", temp);
     setText("weather-desc", desc);
     setText("weather-feels", feels);
     setText("weather-humidity", humidity);
-    var dir = windDir(wind.deg);
+    setText("weather-pressure", num(main.pressure) ? (main.pressure * 0.02953).toFixed(2) : "--");
     setText("weather-wind", (dir ? dir + " " : "") + speed);
+    setText("weather-gust", num(wind.gust) && wind.gust > (wind.speed || 0) + 2 ? "Gusts " + Math.round(wind.gust) + " mph" : "");
     setText("weather-visibility", vis);
+    setText("weather-clouds", current.clouds && num(current.clouds.all) ? current.clouds.all + "% cloud cover" : "");
+    var nowS = Date.now() / 1000, until = num(sys.sunset) ? sys.sunset - nowS : -1;
+    setText("weather-sunset-in", until > 0 && until < 86400 ? "in " + (until >= 3600 ? Math.floor(until / 3600) + "h " : "") + Math.floor(until % 3600 / 60) + "m" : "");
+    setText("weather-sunrise", rise);
+    setText("weather-sunset", set);
+    if (num(sys.sunrise) && num(sys.sunset) && sys.sunset > sys.sunrise) {
+      var mins = Math.round((sys.sunset - sys.sunrise) / 60);
+      setText("weather-daylight", Math.floor(mins / 60) + "h " + pad2(mins % 60) + "m daylight");
+    }
+    setText("weather-updated", "Updated " + fmtTime(new Date()));
+    var hl = todayHiLo();
+    setText("home-hilo", hl);
+    setText("weather-hilo", hl);
+  }
+
+  function popText(p) {
+    var pct = Math.round((p || 0) * 100);
+    return pct >= 10 ? pct + "%" : "";
   }
 
   function renderForecast(forecast) {
+    lastForecast = forecast;
     var list = (forecast && forecast.list) || [];
     var hourly = $("hourly");
     var daily = $("daily");
+    var hl = todayHiLo();
+    setText("home-hilo", hl);
+    setText("weather-hilo", hl);
 
     if (hourly) {
       var hf = document.createDocumentFragment();
-      list.slice(0, 8).forEach(function (f) {
-        var time = new Date(f.dt * 1000).toLocaleString("en-US", { hour: "numeric", hour12: true });
-        var percent = Math.round((f.pop || 0) * 100);
-        var total = precipOf(f) / 25.4;
-        var precip = total >= 0.005 ? total.toFixed(2) + '" · ' + percent + "%" : (percent > 0 ? percent + "%" : "Dry");
-        hf.appendChild(makeTile("hour", time, Math.round(f.main.temp) + "°", precip));
+      list.slice(0, 8).forEach(function (f, i) {
+        var d = new Date(f.dt * 1000);
+        var box = el("div", "hour" + (i === 0 ? " first" : ""));
+        box.appendChild(el("div", "hour-time", d.toLocaleString("en-US", { hour: "numeric", hour12: true })));
+        var ic = el("div", "wx-icon hour-icon");
+        if (WX) ic.innerHTML = WX.svg(wxKind(f), false);
+        box.appendChild(ic);
+        box.appendChild(el("div", "hour-temp", deg(f.main && f.main.temp)));
+        var pop = popText(f.pop);
+        var p = el("div", "hour-pop" + (pop ? "" : " dry"), pop || "–");
+        box.appendChild(p);
+        hf.appendChild(box);
       });
       hourly.innerHTML = "";
       hourly.appendChild(hf);
@@ -378,18 +488,43 @@
       list.forEach(function (f) {
         var d = new Date(f.dt * 1000);
         var k = dayKey(d);
-        if (!byKey[k]) { byKey[k] = { date: d, temps: [], precip: 0, pop: 0 }; days.push(byKey[k]); }
-        byKey[k].temps.push(f.main.temp);
-        byKey[k].precip += precipOf(f);
-        byKey[k].pop = Math.max(byKey[k].pop, f.pop || 0);
+        if (!byKey[k]) { byKey[k] = { date: d, temps: [], precip: 0, pop: 0, pick: null, pickDist: 99 }; days.push(byKey[k]); }
+        var day = byKey[k];
+        if (f.main && num(f.main.temp)) day.temps.push(f.main.temp);
+        day.precip += precipOf(f);
+        day.pop = Math.max(day.pop, f.pop || 0);
+        var dist = Math.abs(d.getHours() - 13); // the early-afternoon slot best describes the day
+        if (dist < day.pickDist) { day.pickDist = dist; day.pick = f; }
       });
+      if (days.length > 5) days = days.slice(0, 5);
+      var all = [];
+      days.forEach(function (d) { all = all.concat(d.temps); });
+      var gMin = all.length ? Math.min.apply(null, all) : 0, gMax = all.length ? Math.max.apply(null, all) : 1;
+      var span = Math.max(1, gMax - gMin);
+      var todayK = dayKey(new Date());
       var df = document.createDocumentFragment();
-      days.slice(0, 6).forEach(function (d) {
-        var hi = Math.round(Math.max.apply(null, d.temps));
-        var lo = Math.round(Math.min.apply(null, d.temps));
-        var label = d.date.toLocaleDateString([], { weekday: "short" });
-        df.appendChild(makeTile("day", label, hi + "° / " + lo + "°",
-          (d.precip / 25.4).toFixed(2) + '" · ' + Math.round(d.pop * 100) + "%"));
+      days.forEach(function (d) {
+        if (!d.temps.length) return;
+        var hi = Math.max.apply(null, d.temps), lo = Math.min.apply(null, d.temps);
+        var box = el("div", "day");
+        box.appendChild(el("div", "day-name", dayKey(d.date) === todayK ? "Today" : d.date.toLocaleDateString([], { weekday: "short" })));
+        var ic = el("div", "wx-icon day-icon");
+        if (WX) ic.innerHTML = WX.svg(wxKind(d.pick), false);
+        box.appendChild(ic);
+        box.appendChild(el("div", "day-desc", capFirst(wxOf(d.pick).description || "")));
+        var pop = popText(d.pop), inch = d.precip / 25.4;
+        box.appendChild(el("div", "day-pop" + (pop ? "" : " dry"), pop ? pop + (inch >= 0.005 ? " · " + inch.toFixed(2) + '"' : "") : ""));
+        var temps = el("div", "day-temps");
+        temps.appendChild(el("span", "day-lo", Math.round(lo) + "°"));
+        var bar = el("span", "range");
+        var fill = el("i");
+        fill.style.left = Math.round((lo - gMin) / span * 100) + "%";
+        fill.style.width = Math.max(6, Math.round((hi - lo) / span * 100)) + "%";
+        bar.appendChild(fill);
+        temps.appendChild(bar);
+        temps.appendChild(el("span", "day-hi", Math.round(hi) + "°"));
+        box.appendChild(temps);
+        df.appendChild(box);
       });
       daily.innerHTML = "";
       daily.appendChild(df);
@@ -401,6 +536,8 @@
     if (!weatherLoaded) {
       setText("home-desc", msg);
       setText("weather-desc", msg);
+      setIcon("home-wx-icon", "cloudy", false);
+      setIcon("weather-icon", "cloudy", false);
     }
   }
 
@@ -443,6 +580,281 @@
       });
     });
   }, 10 * 60 * 1000);
+
+  /* ===== WEATHER RADAR (Leaflet, bundled in vendor/leaflet) =====
+   * Animated precipitation radar centred on the house. Source: NWS NEXRAD composite tiles from
+   * the Iowa Environmental Mesonet (free, no key, CORS-enabled, updated every 5 minutes; the last
+   * 55 minutes are available as separate layers). If those tiles fail, it falls back to
+   * RainViewer's free radar tiles (past 2 hours; capped at zoom 7, 100 requests/min per IP).
+   * Base map: CARTO dark tiles (OpenStreetMap data). Two maps share one animation timer: a small
+   * preview on the Home weather card (tap opens the Weather page) and the big one there.
+   * Nothing animates while its page isn't showing or the screen is off.
+   */
+  var radar = (function () {
+    var LAT = num(CFG.RADAR_LAT) ? CFG.RADAR_LAT : 41.86;
+    var LON = num(CFG.RADAR_LON) ? CFG.RADAR_LON : -80.79;
+    var ZOOM = num(CFG.RADAR_ZOOM) ? CFG.RADAR_ZOOM : 7;
+    var IEM = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913";
+    var IEM_META = "https://mesonet.agron.iastate.edu/data/gis/images/4326/USCOMP/n0q_0.json";
+    var RV_META = "https://api.rainviewer.com/public/weather-maps.json";
+    // Esri "Dark Gray Canvas" (free, no key, CORS) with OpenStreetMap (darkened in CSS) as a fallback.
+    var ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
+    var BASE = ESRI + "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+    var LABELS = ESRI + "World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}";
+    var ATTR = "Esri, HERE, Garmin, &copy; OpenStreetMap contributors";
+    var OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+    var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    var OPACITY = 0.78;
+    var HAS_L = typeof window.L !== "undefined" && !!window.L.map;
+
+    var provider = "iem";
+    var frames = [];       // [{ url, time (ms or 0), mins (minutes ago) }]
+    var maps = {};         // name -> { map, layers: [], el, loaded, errors }
+    var idx = 0, timer = null, playing = true, refreshTimer = null, validMs = 0;
+    var startedAt = 0, switched = false;
+
+    function iemFrames() {
+      var bucket = Math.floor(Date.now() / 300000); // new tile URLs every 5 minutes
+      var out = [];
+      for (var m = 55; m >= 0; m -= 5) {
+        out.push({ url: IEM + (m ? "-m" + pad2(m) + "m" : "") + "/{z}/{x}/{y}.png?v=" + bucket, mins: m, time: validMs ? validMs - m * 60000 : 0 });
+      }
+      return out;
+    }
+
+    function frameLabel(f) {
+      if (!f) return "--";
+      if (f.time) return fmtTime(new Date(f.time));
+      return f.mins ? "-" + f.mins + " min" : "Now";
+    }
+
+    function msg(text) { setText("radar-msg", text || ""); toggleClass($("radar-msg"), "show", !!text); }
+
+    function drawTicks() {
+      var box = $("radar-ticks");
+      if (!box) return;
+      box.innerHTML = "";
+      for (var i = 0; i < frames.length; i++) {
+        var t = document.createElement("i");
+        t.setAttribute("data-i", i);
+        box.appendChild(t);
+      }
+      paintTicks();
+    }
+    function paintTicks() {
+      var box = $("radar-ticks");
+      if (box) each(box.childNodes, function (t, i) { t.className = i === idx ? "on" : (i < idx ? "past" : ""); });
+      var label = frameLabel(frames[idx]);
+      setText("radar-time", label);
+      setText("home-radar-time", frames.length ? frameLabel(frames[frames.length - 1]) : "");
+    }
+
+    function buildRadarLayers(m) {
+      each(m.layers, function (l) { m.map.removeLayer(l); });
+      m.layers = [];
+      each(frames, function (f, i) {
+        var opts = { opacity: i === idx ? OPACITY : 0, zIndex: 5, pane: "radar", updateWhenIdle: true, keepBuffer: 1, attribution: "" };
+        if (provider === "rainviewer") { opts.maxNativeZoom = 7; opts.maxZoom = 10; }
+        var layer = window.L.tileLayer(f.url, opts);
+        layer.on("tileload", function () { m.loaded++; if (m.loaded === 1) msg(""); });
+        layer.on("tileerror", function () { m.errors++; checkHealth(); });
+        layer.addTo(m.map);
+        m.layers.push(layer);
+      });
+      m.map.attributionControl.setPrefix(false);
+      var src = provider === "iem" ? "Radar: NWS NEXRAD via Iowa Env. Mesonet" : 'Radar: <a href="https://www.rainviewer.com">RainViewer</a>';
+      if (m.srcAttr) m.map.attributionControl.removeAttribution(m.srcAttr);
+      m.srcAttr = src;
+      m.map.attributionControl.addAttribution(src);
+    }
+
+    // IEM tiles failing (and none loading): switch to RainViewer once.
+    function checkHealth() {
+      var loaded = 0, errors = 0;
+      for (var k in maps) if (maps.hasOwnProperty(k)) { loaded += maps[k].loaded; errors += maps[k].errors; }
+      if (provider === "iem" && !switched && loaded === 0 && errors >= 6) {
+        switched = true;
+        if (window.console) console.warn("Radar: IEM tiles failing, switching to RainViewer");
+        useRainViewer();
+      } else if (loaded === 0 && errors >= 6 && provider === "rainviewer") {
+        msg(navigator.onLine === false ? "Radar offline - will retry" : "Radar unavailable right now");
+      }
+    }
+
+    function useRainViewer() {
+      getJSON(RV_META, function (err, data) {
+        var past = data && data.radar && data.radar.past;
+        if (err || !past || !past.length || !/^https:\/\//.test(String(data.host || ""))) {
+          msg("Radar unavailable right now");
+          return;
+        }
+        provider = "rainviewer";
+        frames = [];
+        each(past.slice(-12), function (p) {
+          if (!p || !/^\/[A-Za-z0-9\/_-]+$/.test(String(p.path || ""))) return;
+          frames.push({ url: data.host + p.path + "/256/{z}/{x}/{y}/2/1_1.png", time: (p.time || 0) * 1000, mins: 0 });
+        });
+        idx = frames.length - 1;
+        for (var k in maps) if (maps.hasOwnProperty(k)) { maps[k].loaded = 0; maps[k].errors = 0; buildRadarLayers(maps[k]); }
+        drawTicks();
+      });
+    }
+
+    function fetchValidTime(cb) {
+      getJSON(IEM_META, function (err, data) {
+        var v = data && data.meta && Date.parse(data.meta.valid);
+        if (!err && v && !isNaN(v)) validMs = v;
+        if (cb) cb();
+      });
+    }
+
+    function makeMap(name, elId, interactive, zoom) {
+      var host = $(elId);
+      if (!HAS_L || !host || maps[name]) return;
+      var map = window.L.map(host, {
+        center: [LAT, LON], zoom: zoom, minZoom: 4, maxZoom: interactive ? 10 : zoom,
+        zoomControl: false, attributionControl: true, fadeAnimation: true, zoomAnimation: interactive,
+        dragging: interactive, touchZoom: interactive, doubleClickZoom: interactive, scrollWheelZoom: false,
+        boxZoom: false, keyboard: false, tap: false, inertia: interactive
+      });
+      map.createPane("radar").style.zIndex = 350;
+      map.createPane("labels").style.zIndex = 420;
+      map.getPane("labels").style.pointerEvents = "none";
+      var base = window.L.tileLayer(BASE, { maxZoom: 19, maxNativeZoom: 16, attribution: ATTR, updateWhenIdle: true, keepBuffer: 1 }).addTo(map);
+      var labels = window.L.tileLayer(LABELS, { maxZoom: 19, maxNativeZoom: 16, pane: "labels", updateWhenIdle: true, keepBuffer: 1 }).addTo(map);
+      var baseOk = 0, baseErr = 0;
+      base.on("tileload", function () { baseOk++; });
+      base.on("tileerror", function () {
+        // Esri tiles failing: use OpenStreetMap's (shown darkened by CSS) instead
+        if (++baseErr >= 4 && !baseOk && !base._osm) {
+          base._osm = true;
+          map.removeLayer(labels);
+          map.removeLayer(base);
+          window.L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR, className: "osm-dark", updateWhenIdle: true, keepBuffer: 1 }).addTo(map);
+        }
+      });
+      var icon = window.L.divIcon({ className: "radar-home", html: "<span></span>", iconSize: [16, 16], iconAnchor: [8, 8] });
+      window.L.marker([LAT, LON], { icon: icon, interactive: false, keyboard: false }).addTo(map);
+      maps[name] = { map: map, layers: [], el: host, loaded: 0, errors: 0, srcAttr: "" };
+      buildRadarLayers(maps[name]);
+    }
+
+    function visibleMaps() {
+      var out = [];
+      if (currentPage === "weather" && maps.full) out.push(maps.full);
+      if (currentPage === "home" && maps.mini) out.push(maps.mini);
+      return out;
+    }
+
+    function show(i) {
+      var prev = idx;
+      idx = (i + frames.length) % frames.length;
+      for (var k in maps) {
+        if (!maps.hasOwnProperty(k)) continue;
+        var ls = maps[k].layers;
+        if (ls[idx]) ls[idx].setOpacity(OPACITY);
+        if (prev !== idx && ls[prev]) ls[prev].setOpacity(0);
+      }
+      paintTicks();
+    }
+
+    function tick() {
+      clearTimeout(timer);
+      timer = null;
+      if (!frames.length || !playing || isHidden() || !visibleMaps().length) return;
+      show(idx + 1);
+      // linger on the newest frame so "now" is easy to read
+      timer = setTimeout(tick, idx === frames.length - 1 ? 2200 : 550);
+    }
+    function schedule() {
+      clearTimeout(timer);
+      timer = null;
+      if (playing && !isHidden() && visibleMaps().length) timer = setTimeout(tick, 1200);
+    }
+
+    function setPlaying(on) {
+      playing = on;
+      var b = $("radar-play");
+      toggleClass(b, "paused", !on);
+      if (b) b.setAttribute("aria-label", on ? "Pause radar" : "Play radar");
+      if (on) schedule(); else { clearTimeout(timer); timer = null; show(frames.length - 1); }
+    }
+
+    function refresh() {
+      if (provider === "iem") {
+        fetchValidTime(function () {
+          frames = iemFrames();
+          for (var k in maps) {
+            if (!maps.hasOwnProperty(k)) continue;
+            each(maps[k].layers, function (l, i) { if (frames[i]) l.setUrl(frames[i].url); });
+          }
+          paintTicks();
+        });
+      } else {
+        useRainViewer();
+      }
+    }
+
+    function ensure() {
+      if (!HAS_L) { msg("Radar couldn't load"); return; }
+      if (!startedAt) {
+        startedAt = Date.now();
+        frames = iemFrames();
+        idx = frames.length - 1;
+        drawTicks();
+        fetchValidTime(function () { frames = iemFrames(); paintTicks(); });
+        refreshTimer = setInterval(function () { if (!isHidden()) refresh(); }, 5 * 60 * 1000);
+        // nothing loaded after 20 s: say so (offline or blocked)
+        setTimeout(function () {
+          var any = 0;
+          for (var k in maps) if (maps.hasOwnProperty(k)) any += maps[k].loaded;
+          if (!any && (maps.full || maps.mini)) checkHealth();
+        }, 20000);
+      }
+      if (currentPage === "home") makeMap("mini", "home-radar-map", false, Math.max(4, ZOOM - 1));
+      if (currentPage === "weather") makeMap("full", "radar-container", true, ZOOM);
+    }
+
+    function onPageChange() {
+      if (!startedAt && currentPage !== "home" && currentPage !== "weather") return;
+      ensure();
+      var vis = visibleMaps();
+      // maps created (or resized) while hidden need their size re-measured
+      each(vis, function (m) { try { m.map.invalidateSize(false); } catch (e) { /* ignore */ } });
+      schedule();
+    }
+
+    function init() {
+      if ($("home-radar")) $("home-radar").addEventListener("click", function (e) {
+        if (e.stopPropagation) e.stopPropagation();
+        showPage("weather");
+      });
+      if ($("radar-play")) $("radar-play").addEventListener("click", function () { setPlaying(!playing); });
+      if ($("radar-recenter")) $("radar-recenter").addEventListener("click", function () {
+        if (maps.full) maps.full.map.setView([LAT, LON], ZOOM);
+      });
+      if ($("radar-zoom-in")) $("radar-zoom-in").addEventListener("click", function () { if (maps.full) maps.full.map.zoomIn(); });
+      if ($("radar-zoom-out")) $("radar-zoom-out").addEventListener("click", function () { if (maps.full) maps.full.map.zoomOut(); });
+      if ($("radar-ticks")) $("radar-ticks").addEventListener("click", function (e) {
+        var i = e.target && e.target.getAttribute && e.target.getAttribute("data-i");
+        if (i !== null && i !== undefined && i !== "") { setPlaying(false); show(Number(i)); }
+      });
+      window.addEventListener("resize", function () {
+        each(visibleMaps(), function (m) { try { m.map.invalidateSize(false); } catch (e) { /* ignore */ } });
+      });
+      // first map a moment after start-up so the rest of the page paints first
+      setTimeout(onPageChange, 800);
+    }
+
+    return {
+      init: init, onPageChange: onPageChange, schedule: schedule,
+      state: function () {
+        var s = { provider: provider, frames: frames.length, idx: idx, playing: playing, maps: {} };
+        for (var k in maps) if (maps.hasOwnProperty(k)) s.maps[k] = { loaded: maps[k].loaded, errors: maps[k].errors, layers: maps[k].layers.length };
+        return s;
+      }
+    };
+  })();
 
   /* ===== CALENDAR ===== */
   var HOLIDAY_RE = /\s+Day\s*$|\bBirthday\b|\bHolidays?\b|\bChristmas\b|\bThanksgiving\b|\bHalloween\b|\bEaster\b|\bNew Year/i;
@@ -497,7 +909,7 @@
       if (mainItems === null && holidayItems === null) {
         if (window.console) console.error("Calendar failed:", mainErr);
         if (!calLoaded) setText("today-date", now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
-        if (!calLoaded && $("today-events")) $("today-events").innerHTML = '<div style="opacity:0.6">' + (calNotConfigured ? "Calendar not configured" : "Calendar unavailable") + "</div>";
+        if (!calLoaded && $("today-events")) $("today-events").innerHTML = '<div class="today-empty">' + (calNotConfigured ? "Calendar not configured" : "Calendar unavailable") + "</div>";
         return done(false);
       }
       var all = (mainItems || []).concat(holidayItems || []);
@@ -533,6 +945,8 @@
     renderToday(calEvents);
   }
 
+  // the rest show as "+N more" (tap the day for all of them); 2 on short screens like 1024x600
+  var MAX_CELL_EVENTS = (window.innerHeight || 800) < 700 ? 2 : 3;
   function renderCalendar(events) {
     var grid = $("calendar-grid");
     if (!grid) return;
@@ -589,12 +1003,24 @@
       dateLabel.textContent = day;
       cell.appendChild(dateLabel);
 
-      (eventMap[day] || []).forEach(function (ev) {
+      var dayEvs = eventMap[day] || [];
+      var dow = (firstDay + day - 1) % 7;
+      if (dow === 0 || dow === 6) cell.className += " weekend";
+      if (day < today) cell.className += " past";
+      if (dayEvs.length) cell.className += " has-events";
+      dayEvs.forEach(function (ev, n) {
+        if (n >= MAX_CELL_EVENTS && dayEvs.length > MAX_CELL_EVENTS + 1) return;
         var evDiv = document.createElement("div");
         evDiv.className = "cal-event" + (isHolidayEvent(ev) ? " holiday" : "");
         evDiv.textContent = ev.summary || "Untitled";
         cell.appendChild(evDiv);
       });
+      if (dayEvs.length > MAX_CELL_EVENTS + 1) {
+        var more = document.createElement("div");
+        more.className = "cal-more";
+        more.textContent = "+" + (dayEvs.length - MAX_CELL_EVENTS) + " more";
+        cell.appendChild(more);
+      }
       frag.appendChild(cell);
     }
 
@@ -682,6 +1108,32 @@
     if ((e.key === "Escape" || e.keyCode === 27) && dayModal && dayModal.classList.contains("open")) closeDayModal();
   });
 
+  // "Coming up": the next few events after today (within a week), under today's list.
+  function renderUpcoming(events, dayEnd) {
+    var box = $("upcoming-events");
+    if (!box) return;
+    var limit = new Date(dayEnd.getTime() + 7 * 86400000);
+    var next = events.filter(function (ev) {
+      var s = parseEventDate(ev);
+      return s && s > dayEnd && s <= limit;
+    }).slice(0, 4);
+    box.innerHTML = "";
+    toggleClass($("upcoming"), "show", next.length > 0);
+    each(next, function (ev) {
+      var s = parseEventDate(ev);
+      var row = document.createElement("div");
+      row.className = "up-event" + (isHolidayEvent(ev) ? " holiday" : "");
+      var when = document.createElement("span");
+      when.className = "up-when";
+      when.textContent = s.toLocaleDateString([], { weekday: "short" }) + (ev.start && ev.start.dateTime ? " " + fmtTime(s) : "");
+      var t = document.createElement("span");
+      t.className = "up-title";
+      t.textContent = ev.summary || "Untitled";
+      row.appendChild(when); row.appendChild(t);
+      box.appendChild(row);
+    });
+  }
+
   function renderToday(events) {
     var container = $("today-events");
     var dateEl = $("today-date");
@@ -699,9 +1151,10 @@
 
     container.innerHTML = "";
     if (!todays.length) {
-      container.innerHTML = '<div style="opacity:0.6">' + (calNotConfigured ? "Calendar not configured" : (calLoaded ? "No events today" : "Loading…")) + "</div>";
-      return;
+      container.innerHTML = '<div class="today-empty">' + (calNotConfigured ? "Calendar not configured" : (calLoaded ? "Nothing scheduled today" : "Loading…")) + "</div>";
     }
+    renderUpcoming(events, dayEnd);
+    if (!todays.length) return;
 
     todays.forEach(function (ev) {
       var div = document.createElement("div");
@@ -710,7 +1163,10 @@
       time.className = "today-event-time";
       time.textContent = todayEventTime(ev, dayStart);
       div.appendChild(time);
-      div.appendChild(document.createTextNode(ev.summary || "Untitled"));
+      var title = document.createElement("span");
+      title.className = "today-event-title";
+      title.textContent = ev.summary || "Untitled";
+      div.appendChild(title);
       container.appendChild(div);
     });
   }
@@ -794,6 +1250,8 @@
         loadedOnce = true;
         setEmpty(null);
         if (page === "home") homeImg.style.opacity = "1";
+        var bg = $("photo-frame-bg");
+        if (page === "photos" && bg && frameImg.src) bg.style.backgroundImage = 'url("' + frameImg.src.replace(/["\\]/g, "") + '")';
       };
     }
     function handleError(page) {
@@ -984,6 +1442,7 @@
       toggleClass(playBtn, "paused", isPlaying);
     }
     setText("home-nowplaying-text", home);
+    toggleClass(document.body, "playing", home !== "Not Playing");
     var out = spotify.deviceName() || connectedOutput;
     if (outputText && outputText.textContent !== out) outputText.textContent = out;
   }
@@ -1557,13 +2016,14 @@
       updateNowPlaying();
     }
 
-    function play(id) {
+    function play(id, title) {
       if (!id) { msg("Paste a YouTube link (youtu.be/…, youtube.com/watch?v=…) or an 11-character video ID."); return; }
       msg("Loading…");
+      showResults(false);
       var ph = $("yt-placeholder");
       if (ph) ph.style.display = "none";
       toggleClass($("yt-wrap"), "has-video", true);
-      currentTitle = "";
+      currentTitle = title || "";
       store.set("ytLast", id);
       loadApi(function (err) {
         if (err) { msg(err.message); if (ph) ph.style.display = ""; return; }
@@ -1643,6 +2103,106 @@
       } catch (e) { fallback(); }
     }
 
+    /* --- Search (through our /api/youtube-search function; the key stays on the server) --- */
+    var searchCache = {}, searchSeq = 0, lastResults = null;
+
+    function cleanQuery(q) { return String(q || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "").slice(0, 80); }
+
+    function showResults(on) {
+      var r = $("yt-results");
+      if (r) r.style.display = on ? "" : "none";
+      toggleClass($("yt-wrap"), "show-results", !!on);
+      var o = $("yt-results-open");
+      if (o) o.style.display = (!on && lastResults && lastResults.length) ? "" : "none";
+    }
+
+    function resultsMessage(title, text, isError) {
+      var grid = $("yt-results-grid");
+      if (!grid) return;
+      grid.innerHTML = "";
+      var box = document.createElement("div");
+      box.className = "yt-results-empty" + (isError ? " error" : "");
+      var t = document.createElement("div"); t.className = "t"; t.textContent = title; box.appendChild(t);
+      if (text) { var h = document.createElement("div"); h.className = "h"; h.textContent = text; box.appendChild(h); }
+      grid.appendChild(box);
+    }
+
+    function renderResults(q, items) {
+      var grid = $("yt-results-grid");
+      if (!grid) return;
+      setText("yt-results-title", "Results for \u201c" + q + "\u201d");
+      if (!items.length) { resultsMessage("No videos found", "Try different words.", false); return; }
+      grid.innerHTML = "";
+      var frag = document.createDocumentFragment();
+      each(items, function (it) {
+        if (!it || !/^[A-Za-z0-9_-]{11}$/.test(String(it.id || ""))) return;
+        var b = document.createElement("button");
+        b.className = "yt-result";
+        b.setAttribute("data-id", it.id);
+        var th = document.createElement("div"); th.className = "yt-thumb";
+        if (it.thumb && /^https:\/\/i\d?\.ytimg\.com\//.test(it.thumb)) {
+          var img = document.createElement("img");
+          img.setAttribute("referrerpolicy", "no-referrer");
+          img.setAttribute("loading", "lazy");
+          img.alt = "";
+          img.src = it.thumb;
+          th.appendChild(img);
+        }
+        var pl = document.createElement("span"); pl.className = "yt-thumb-play"; th.appendChild(pl);
+        var t = document.createElement("div"); t.className = "yt-result-title"; t.textContent = it.title || it.id;
+        var c = document.createElement("div"); c.className = "yt-result-channel"; c.textContent = it.channel || "";
+        b.appendChild(th); b.appendChild(t); b.appendChild(c);
+        b.addEventListener("click", function () { play(it.id, it.title); });
+        frag.appendChild(b);
+      });
+      grid.appendChild(frag);
+      grid.scrollTop = 0;
+    }
+
+    function searchError(err) {
+      var m = String((err && err.message) || "");
+      var detail = m.indexOf(" - ") !== -1 ? m.slice(m.indexOf(" - ") + 3) : "";
+      if (/^HTTP 429/.test(m)) return ["Daily search limit reached", detail || "YouTube allows about 100 searches a day. Favourites and links still work."];
+      if (/^HTTP 503/.test(m)) return ["Search isn't set up", "The YouTube key isn't configured on the server."];
+      if (/^HTTP 400/.test(m)) return ["Can't search for that", detail];
+      if (/^HTTP 403/.test(m)) return ["Search not allowed here", "Open the dashboard from its own address."];
+      if (/^HTTP 5/.test(m)) return ["Search isn't working right now", detail || "Try again in a bit."];
+      if (navigator.onLine === false || /Network|Timed out/.test(m)) return ["Can't reach YouTube", "Check the Wi-Fi and try again."];
+      return ["Search failed", detail];
+    }
+
+    function search(raw) {
+      var q = cleanQuery(raw);
+      if (!q) { msg("Type something to search for."); return; }
+      var parsed = parseId(q);
+      if (parsed && /youtu\.?be/i.test(q)) { play(parsed); return; } // a link pasted into the search box
+      msg("");
+      showResults(true);
+      setText("yt-results-title", "Searching for \u201c" + q + "\u201d\u2026");
+      var key = q.toLowerCase();
+      if (searchCache[key]) { lastResults = searchCache[key]; renderResults(q, lastResults); return; }
+      if (navigator.onLine === false) { var o = searchError(new Error("Network error")); resultsMessage(o[0], o[1], true); return; }
+      resultsMessage("Searching\u2026", "", false);
+      var seq = ++searchSeq;
+      getJSON(apiUrl("youtube-search?q=" + encodeURIComponent(q)), function (err, data, meta) {
+        if (seq !== searchSeq) return; // a newer search started
+        if (err || !data || !data.items) {
+          if (window.console) console.warn("YouTube search failed:", err);
+          var e = searchError(err);
+          setText("yt-results-title", "Search");
+          resultsMessage(e[0], e[1], true);
+          return;
+        }
+        if (!(meta && meta.offline)) {
+          searchCache[key] = data.items;
+          var keys = []; for (var k in searchCache) if (searchCache.hasOwnProperty(k)) keys.push(k);
+          if (keys.length > 30) delete searchCache[keys[0]];
+        }
+        lastResults = data.items;
+        renderResults(q, data.items);
+      });
+    }
+
     function drawFavs() {
       if (favsDrawn) return;
       favsDrawn = true;
@@ -1666,13 +2226,20 @@
       if (input) input.addEventListener("keydown", function (e) {
         if (e.keyCode === 13) { play(parseId(input.value)); input.blur(); }
       });
+      var sIn = $("yt-search"), sGo = $("yt-search-go");
+      function doSearch() { search(sIn && sIn.value); if (sIn) sIn.blur(); }
+      if (sGo) sGo.addEventListener("click", doSearch);
+      if (sIn) sIn.addEventListener("keydown", function (e) { if (e.keyCode === 13) { if (e.preventDefault) e.preventDefault(); doSearch(); } });
+      if ($("yt-search-form")) $("yt-search-form").addEventListener("submit", function (e) { if (e.preventDefault) e.preventDefault(); doSearch(); });
+      if ($("yt-results-close")) $("yt-results-close").addEventListener("click", function () { showResults(false); });
+      if ($("yt-results-open")) $("yt-results-open").addEventListener("click", function () { if (lastResults) showResults(true); });
       if ($("yt-fs")) $("yt-fs").addEventListener("click", toggleFullscreen);
       if ($("yt-stop")) $("yt-stop").addEventListener("click", stop);
       document.addEventListener("keydown", function (e) { if (e.keyCode === 27) exitMax(); });
     }
 
     return {
-      init: init, play: play, stop: stop, parseId: parseId,
+      init: init, play: play, stop: stop, parseId: parseId, search: search,
       onShow: drawFavs,
       isPlaying: function () { return playing; },
       title: function () { return currentTitle; },
@@ -1763,6 +2330,7 @@
   var cameFromSpotify = restoreMediaState();
   // debug/testing hook (harmless): lets tests and the console reach the media modules
   window.__dashMedia = { spotify: spotify, youtube: youtube, bluetooth: bluetooth, sha256: sha256, base64url: base64url };
+  window.__dashRadar = radar;
 
   /* ===== RECOVERY ===== */
   // Back online after a Wi-Fi drop: refresh anything that has gone stale.
@@ -1771,6 +2339,7 @@
   // Screen turned back on: resume the slideshow and refresh stale data.
   function onVisibility() {
     slideshow.schedule();
+    radar.schedule();
     if (!isHidden()) { refreshStale(5 * 60 * 1000); spotify.onPageChange(); }
   }
   document.addEventListener("visibilitychange", onVisibility);
@@ -1825,6 +2394,7 @@
   })();
 
   /* ===== INIT ===== */
+  radar.init();
   showPage(cameFromSpotify ? "media" : "home");
   renderCalendarAll();
   weatherTask.run();

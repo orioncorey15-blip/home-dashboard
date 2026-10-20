@@ -12,8 +12,12 @@ function trimCurrent(d) {
   return {
     dt: num(d.dt),
     weather: [{ main: w.main, description: w.description, icon: w.icon }],
-    main: { temp: num(main.temp), feels_like: num(main.feels_like), humidity: num(main.humidity) },
-    wind: { speed: num(wind.speed), deg: num(wind.deg) },
+    main: {
+      temp: num(main.temp), feels_like: num(main.feels_like), humidity: num(main.humidity),
+      temp_min: num(main.temp_min), temp_max: num(main.temp_max), pressure: num(main.pressure),
+    },
+    wind: { speed: num(wind.speed), deg: num(wind.deg), gust: num(wind.gust) },
+    clouds: { all: num((d.clouds || {}).all) },
     visibility: num(d.visibility),
     sys: { sunrise: num(sys.sunrise), sunset: num(sys.sunset) },
   };
@@ -22,7 +26,13 @@ function trimCurrent(d) {
 function trimForecast(d) {
   return {
     list: ((d && d.list) || []).map((f) => {
-      const out = { dt: num(f.dt), pop: num(f.pop), main: { temp: num((f.main || {}).temp) } };
+      const w = (f.weather && f.weather[0]) || {};
+      const out = {
+        dt: num(f.dt), pop: num(f.pop),
+        main: { temp: num((f.main || {}).temp), feels_like: num((f.main || {}).feels_like) },
+        weather: [{ main: w.main, description: w.description, icon: w.icon }],
+        wind: { speed: num((f.wind || {}).speed) },
+      };
       if (f.rain && num(f.rain["3h"]) !== undefined) out.rain = { "3h": f.rain["3h"] };
       if (f.snow && num(f.snow["3h"]) !== undefined) out.snow = { "3h": f.snow["3h"] };
       return out;
