@@ -1045,6 +1045,40 @@
   document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("webkitvisibilitychange", onVisibility);
 
+  /*
+   * Offline / stale-data badge: tells you when the weather or calendar on
+   * screen is old (Wi-Fi down, API failing), so stale data isn't mistaken
+   * for current data.
+   */
+  var statusSources = [
+    { label: "Weather", task: weatherTask, maxAge: 30 * 60 * 1000, on: function () { return !!(CFG.WEATHER_API_KEY && CFG.ZIP); } },
+    { label: "Calendar", task: calendarTask, maxAge: 45 * 60 * 1000, on: function () { return !!(CFG.CAL_API_KEY && CFG.CAL_ID); } }
+  ];
+  function whenText(ms) {
+    var d = new Date(ms);
+    var sameDay = dayKey(d) === dayKey(new Date());
+    return (sameDay ? "" : d.toLocaleDateString([], { weekday: "short" }) + " ") + fmtTime(d);
+  }
+  function updateStatus() {
+    var badge = $("status-badge");
+    if (!badge) return;
+    var now = Date.now();
+    var offline = navigator.onLine === false;
+    var parts = [];
+    var oldest = 0;
+    each(statusSources, function (s) {
+      if (!s.on() || !s.task.lastOk) return;
+      if (!oldest || s.task.lastOk < oldest) oldest = s.task.lastOk;
+      if (now - s.task.lastOk > s.maxAge) parts.push(s.label + " last updated " + whenText(s.task.lastOk));
+    });
+    var text = offline ? "Offline" + (oldest ? " \u00b7 last updated " + whenText(oldest) : "") : parts.join(" \u00b7 ");
+    setText("status-badge", text);
+    toggleClass(badge, "show", !!text);
+  }
+  window.addEventListener("online", function () { setTimeout(updateStatus, 0); });
+  window.addEventListener("offline", updateStatus);
+  setInterval(updateStatus, 15000);
+
   /* ===== INIT ===== */
   showPage("home");
   renderCalendarAll();
