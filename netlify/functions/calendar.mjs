@@ -28,7 +28,9 @@ export default async (req) => {
     `&fields=${encodeURIComponent("items(summary,start,end)")}`;
   try {
     const data = await upstreamJSON(url, ttl);
-    return json({ items: (data && data.items) || [] }, { maxAge: ttl });
+    // Map explicitly: don't rely on the fields= filter alone to keep private details out.
+    const items = ((data && data.items) || []).map((e) => ({ summary: e.summary, start: e.start, end: e.end }));
+    return json({ items }, { maxAge: ttl });
   } catch (e) {
     return upstreamError(e);
   }
