@@ -441,7 +441,8 @@
     setText("weather-sunset", set);
     if (num(sys.sunrise) && num(sys.sunset) && sys.sunset > sys.sunrise) {
       var mins = Math.round((sys.sunset - sys.sunrise) / 60);
-      setText("weather-daylight", Math.floor(mins / 60) + "h " + pad2(mins % 60) + "m daylight");
+      var dl = $("weather-daylight");
+      if (dl) dl.innerHTML = Math.floor(mins / 60) + "h " + pad2(mins % 60) + 'm<span class="dl-word"> daylight</span>';
     }
     setText("weather-updated", "Updated " + fmtTime(new Date()));
     var hl = todayHiLo();
@@ -452,6 +453,66 @@
   function popText(p) {
     var pct = Math.round((p || 0) * 100);
     return pct >= 10 ? pct + "%" : "";
+  }
+
+  /*
+   * One icon + label for a whole forecast day, from its 3-hour slots.
+   * The most significant condition wins: likely precipitation (storm > snow > rain > drizzle)
+   * during the daytime first, then likely precipitation at night ("... tonight" / "... early"),
+   * otherwise the typical daytime sky (clear / partly / mostly cloudy / overcast, or fog).
+   * "Likely" = slot chance >= 30% or >= 0.5 mm in the slot.
+   */
+  var WET_RANK = { drizzle: 1, rain: 2, snow: 3, storm: 4 };
+  var SKY = ["clear-day", "partly-day", "cloudy", "overcast"];
+  var SKY_LABEL = ["Clear sky", "Partly cloudy", "Mostly cloudy", "Overcast"];
+  var SKY_SCORE = { "clear-day": 0, "clear-night": 0, "partly-day": 1, "partly-night": 1, cloudy: 2, overcast: 3 };
+  function slotKind(f) {
+    var w = wxOf(f);
+    if (WX) return WX.kind(w.icon, w.main);
+    var m = String(w.main || "").toLowerCase();
+    return m === "thunderstorm" ? "storm" : m === "clear" ? "clear-day" : m === "clouds" ? "cloudy" : m || "cloudy";
+  }
+  function summarizeDay(slots) {
+    var day = [], night = [], i;
+    for (i = 0; i < slots.length; i++) {
+      var h = new Date(slots[i].dt * 1000).getHours();
+      if (h >= 6 && h < 18) day.push(slots[i]); else night.push(slots[i]);
+    }
+    function wettest(list) {
+      var best = null, bestRank = 0, bestPop = -1, maxPop = 0, j;
+      for (j = 0; j < list.length; j++) {
+        var k = slotKind(list[j]), r = WET_RANK[k] || 0, p = list[j].pop || 0;
+        if (!r || (p < 0.3 && precipOf(list[j]) < 0.5)) continue;
+        if (p > maxPop) maxPop = p;
+        if (r > bestRank || (r === bestRank && p > bestPop)) { best = list[j]; bestRank = r; bestPop = p; }
+      }
+      return best ? { slot: best, kind: slotKind(best), maxPop: maxPop } : null;
+    }
+    function wetLabel(w) {
+      var d = wxOf(w.slot).description || wxOf(w.slot).main || w.kind;
+      return w.maxPop && w.maxPop < 0.5 ? "Chance of " + String(d).toLowerCase() : capFirst(d);
+    }
+    var w = wettest(day);
+    if (w) return { kind: w.kind, label: wetLabel(w) };
+    w = wettest(night);
+    if (w) {
+      if (!day.length) return { kind: w.kind, label: wetLabel(w) };
+      var wh = new Date(w.slot.dt * 1000).getHours();
+      return { kind: w.kind, label: wetLabel(w) + (wh < 6 ? " early" : " tonight") };
+    }
+    var base = day.length ? day : night;
+    if (!base.length) return { kind: "cloudy", label: "" };
+    var total = 0, n = 0, fog = 0, nightish = !day.length;
+    for (i = 0; i < base.length; i++) {
+      var k2 = slotKind(base[i]);
+      if (k2 === "fog") { fog++; continue; }
+      if (SKY_SCORE.hasOwnProperty(k2)) { total += SKY_SCORE[k2]; n++; }
+    }
+    if (fog * 2 >= base.length) return { kind: "fog", label: capFirst(wxOf(base[0]).description || "Fog") };
+    var score = n ? Math.round(total / n) : 2;
+    var kind = SKY[score];
+    if (nightish && score < 2) kind = score ? "partly-night" : "clear-night";
+    return { kind: kind, label: SKY_LABEL[score] };
   }
 
   function renderForecast(forecast) {
@@ -488,13 +549,12 @@
       list.forEach(function (f) {
         var d = new Date(f.dt * 1000);
         var k = dayKey(d);
-        if (!byKey[k]) { byKey[k] = { date: d, temps: [], precip: 0, pop: 0, pick: null, pickDist: 99 }; days.push(byKey[k]); }
+        if (!byKey[k]) { byKey[k] = { date: d, temps: [], precip: 0, pop: 0, slots: [] }; days.push(byKey[k]); }
         var day = byKey[k];
         if (f.main && num(f.main.temp)) day.temps.push(f.main.temp);
         day.precip += precipOf(f);
         day.pop = Math.max(day.pop, f.pop || 0);
-        var dist = Math.abs(d.getHours() - 13); // the early-afternoon slot best describes the day
-        if (dist < day.pickDist) { day.pickDist = dist; day.pick = f; }
+        day.slots.push(f);
       });
       if (days.length > 5) days = days.slice(0, 5);
       var all = [];
@@ -508,12 +568,16 @@
         var hi = Math.max.apply(null, d.temps), lo = Math.min.apply(null, d.temps);
         var box = el("div", "day");
         box.appendChild(el("div", "day-name", dayKey(d.date) === todayK ? "Today" : d.date.toLocaleDateString([], { weekday: "short" })));
+        var sum = summarizeDay(d.slots);
         var ic = el("div", "wx-icon day-icon");
-        if (WX) ic.innerHTML = WX.svg(wxKind(d.pick), false);
+        if (WX) ic.innerHTML = WX.svg(sum.kind, false);
+        ic.setAttribute("title", sum.label);
         box.appendChild(ic);
-        box.appendChild(el("div", "day-desc", capFirst(wxOf(d.pick).description || "")));
+        var mid = el("div", "day-mid");
+        mid.appendChild(el("div", "day-desc", sum.label));
         var pop = popText(d.pop), inch = d.precip / 25.4;
-        box.appendChild(el("div", "day-pop" + (pop ? "" : " dry"), pop ? pop + (inch >= 0.005 ? " · " + inch.toFixed(2) + '"' : "") : ""));
+        mid.appendChild(el("div", "day-pop" + (pop ? "" : " dry"), pop ? pop + (inch >= 0.005 ? " · " + inch.toFixed(2) + '"' : "") : ""));
+        box.appendChild(mid);
         var temps = el("div", "day-temps");
         temps.appendChild(el("span", "day-lo", Math.round(lo) + "°"));
         var bar = el("span", "range");
@@ -2331,6 +2395,7 @@
   // debug/testing hook (harmless): lets tests and the console reach the media modules
   window.__dashMedia = { spotify: spotify, youtube: youtube, bluetooth: bluetooth, sha256: sha256, base64url: base64url };
   window.__dashRadar = radar;
+  window.__dashSummarizeDay = summarizeDay;
 
   /* ===== RECOVERY ===== */
   // Back online after a Wi-Fi drop: refresh anything that has gone stale.
