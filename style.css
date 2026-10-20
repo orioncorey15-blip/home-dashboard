@@ -128,12 +128,15 @@ body.night .night-btn { background: #1e88e5; background: var(--accent); }
 }
 body:not(.home-active) #menuToggle { display: none; }
 body.home-active #sidebar {
+  /* On Home the menu is hidden and slides in over the content, so it doesn't
+     reserve a blank 72px column on the left (content uses the full width). */
+  position: fixed; top: 0; bottom: 0; left: 0;
   /* push the nav buttons below the ☰ button so it doesn't cover "Home" */
   padding-top: 72px;
   -webkit-transform: translateX(-100%); transform: translateX(-100%);
   -webkit-transition: -webkit-transform 0.25s; transition: transform 0.25s;
 }
-body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: translateX(0); }
+body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: translateX(0); box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5); }
 
 /* Weather page */
 .weather-top { display: flex; margin-bottom: 20px; }
@@ -258,8 +261,6 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 @media (max-width: 600px) {
   #content { padding: 60px 12px 12px; }
   #home.page { overflow-y: auto; }
-  /* the hidden slide-out menu shouldn't reserve a blank 72px column on a narrow screen */
-  body.home-active #sidebar { position: fixed; top: 0; bottom: 0; left: 0; }
   .home-grid {
     height: auto;
     grid-template-columns: minmax(0, 1fr);
