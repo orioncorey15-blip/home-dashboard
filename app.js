@@ -1323,6 +1323,7 @@
         if (err.status === 403 && /premium/i.test(err.message + " " + err.reason)) setMessage("Controls need Spotify Premium");
         else if (err.status === 403) setMessage("Spotify said no (" + err.message + "). Is this account on the app's user list?");
         else if (connected() && err.status) setMessage("Spotify: " + err.message);
+        else if (connected()) setMessage("Can't reach Spotify right now - retrying");
         render();
         schedulePoll(SLOW_MS);
       });
