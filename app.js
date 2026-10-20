@@ -689,7 +689,7 @@
 
     container.innerHTML = "";
     if (!todays.length) {
-      container.innerHTML = '<div style="opacity:0.6">' + (calLoaded ? "No events today" : "Loading…") + "</div>";
+      container.innerHTML = '<div style="opacity:0.6">' + (calNotConfigured ? "Calendar not configured" : (calLoaded ? "No events today" : "Loading…")) + "</div>";
       return;
     }
 
@@ -1752,8 +1752,8 @@
    * for current data.
    */
   var statusSources = [
-    { label: "Weather", task: weatherTask, maxAge: 30 * 60 * 1000, on: function () { return !!(CFG.WEATHER_API_KEY && CFG.ZIP); } },
-    { label: "Calendar", task: calendarTask, maxAge: 45 * 60 * 1000, on: function () { return !!(CFG.CAL_API_KEY && CFG.CAL_ID); } }
+    { label: "Weather", task: weatherTask, maxAge: 30 * 60 * 1000, on: function () { return !weatherNotConfigured; } },
+    { label: "Calendar", task: calendarTask, maxAge: 45 * 60 * 1000, on: function () { return !calNotConfigured; } }
   ];
   function whenText(ms) {
     var d = new Date(ms);
