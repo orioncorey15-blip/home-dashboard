@@ -621,9 +621,27 @@
     var ids = [];
     var timer = null;
     var fadeTimer = null;
+    var loadedOnce = false;
     var homeImg = $("home-slideshow-img");
     var frameImg = $("photo-frame-img");
     var state = { home: { idx: 0, shown: -1, errors: 0 }, photos: { idx: 0, shown: -1, errors: 0 } };
+
+    var emptyEls = [$("home-photo-empty"), $("photo-frame-empty")];
+
+    // Friendly message instead of a blank frame. title=null hides it.
+    function setEmpty(title, hint) {
+      each(emptyEls, function (el) {
+        if (!el) return;
+        if (!title) { toggleClass(el, "show", false); return; }
+        el.innerHTML = "";
+        var icon = document.createElement("div"); icon.className = "photo-empty-icon";
+        icon.innerHTML = '<svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5z"/></svg>';
+        var t = document.createElement("div"); t.className = "photo-empty-title"; t.textContent = title;
+        el.appendChild(icon); el.appendChild(t);
+        if (hint) { var h = document.createElement("div"); h.className = "photo-empty-hint"; h.textContent = hint; el.appendChild(h); }
+        toggleClass(el, "show", true);
+      });
+    }
 
     function imgFor(page) { return page === "home" ? homeImg : (page === "photos" ? frameImg : null); }
 
@@ -648,6 +666,8 @@
     function handleLoad(page) {
       return function () {
         state[page].errors = 0;
+        loadedOnce = true;
+        setEmpty(null);
         if (page === "home") homeImg.style.opacity = "1";
       };
     }
@@ -658,6 +678,7 @@
         s.errors++;
         if (window.console) console.warn("Photo failed to load, skipping");
         if (s.errors < Math.min(ids.length, 5)) show(page, s.idx + 1); // otherwise wait for next tick
+        else if (!loadedOnce) setEmpty("Photos couldn't load", "Will try again shortly.");
       };
     }
     if (homeImg) { homeImg.onload = handleLoad("home"); homeImg.onerror = handleError("home"); }
@@ -680,7 +701,19 @@
       schedule();
     }
 
-    function setList(newIds) {
+    // emptyHint: message to show if newIds is empty (e.g. where to add photos).
+    function setList(newIds, emptyHint) {
+      if (!newIds.length) {
+        ids = [];
+        clearTimeout(timer); clearTimeout(fadeTimer); timer = null;
+        loadedOnce = false;
+        if (homeImg) homeImg.removeAttribute("src");
+        if (frameImg) frameImg.removeAttribute("src");
+        state.home = { idx: 0, shown: -1, errors: 0 };
+        state.photos = { idx: 0, shown: -1, errors: 0 };
+        setEmpty("No photos yet", emptyHint || "");
+        return;
+      }
       var same = newIds.length === ids.length && newIds.slice().sort().join() === ids.slice().sort().join();
       if (same) return;
       ids = shuffle(newIds.slice());
@@ -689,7 +722,9 @@
       onPageChange();
     }
 
-    return { setList: setList, onPageChange: onPageChange, schedule: schedule };
+    function hasPhotos() { return ids.length > 0; }
+
+    return { setList: setList, onPageChange: onPageChange, schedule: schedule, hasPhotos: hasPhotos };
   })();
 
   function driveUrl(pageToken) {
@@ -707,7 +742,10 @@
   }
 
   function loadDrivePhotos(done) {
-    if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) return done(true);
+    if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) {
+      slideshow.setList([], "Set DRIVE_API_KEY and DRIVE_FOLDER_ID in config.js.");
+      return done(true);
+    }
     var found = [];
     var pages = 0;
     (function fetchPage(token) {
@@ -716,16 +754,15 @@
           if (window.console) console.error("Drive photo load failed:", err);
           var cached = cachedDriveList();
           if (cached) slideshow.setList(cached);
+          else if (!slideshow.hasPhotos()) slideshow.setList([], "Couldn't reach Google Drive. Will try again shortly.");
           return done(false);
         }
         (data.files || []).forEach(function (f) {
           if (f.mimeType && f.mimeType.indexOf("image/") === 0) found.push(f.id);
         });
         if (data.nextPageToken && ++pages < 10) return fetchPage(data.nextPageToken);
-        if (found.length) {
-          slideshow.setList(found);
-          store.set("drivePhotoIds", JSON.stringify(found));
-        }
+        slideshow.setList(found, "Add photos to your Google Drive photo folder.");
+        store.set("drivePhotoIds", JSON.stringify(found));
         done(true);
       });
     })(null);
@@ -750,8 +787,8 @@
       each(window.LOCAL_PHOTOS || [], function (name) {
         if (typeof name === "string" && /\.(jpe?g|png|gif|webp)$/i.test(name)) list.push(name);
       });
-      if (list.length) slideshow.setList(list);
-      else if (window.console) console.warn("No local photos listed in photos/photos.js");
+      if (!list.length && window.console) console.warn("No local photos listed in photos/photos.js");
+      slideshow.setList(list, "Add photos to the photos folder, then run make-photo-list.");
       done(ok);
     }
     el.onload = function () { finish(true); };
