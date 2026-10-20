@@ -191,6 +191,54 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 .play.paused .play-icon { display: none; }
 .play.paused .pause-icon { display: block; }
 
+/* Media panels (Spotify / YouTube) inside the now-playing card */
+.media-nowplaying { min-height: 0; overflow: hidden; }
+.media-panel { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; min-height: 0; }
+.media-panel > * + * { margin-top: 14px; }
+.album-art { position: relative; overflow: hidden; -webkit-flex-shrink: 1; flex-shrink: 1; min-height: 0; }
+#sp-art { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.sp-progress-wrap { width: 100%; max-width: 340px; display: none; }
+.sp-progress { height: 6px; background: #444; border-radius: 3px; overflow: hidden; }
+.sp-progress-bar { height: 100%; width: 0; background: #1db954; }
+.sp-times { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; color: var(--muted); margin-top: 4px; }
+.sp-message { font-size: 14px; color: #ffb74d; text-align: center; min-height: 0; }
+.sp-message:empty { display: none; }
+.sp-account { text-align: center; }
+.sp-connect-btn { background: #1db954; color: #000; border: none; border-radius: 999px; padding: 10px 22px; min-height: 44px; font-weight: 600; font-size: 15px; cursor: pointer; }
+.link-btn { background: none; border: none; color: #aaa; color: var(--muted); text-decoration: underline; font-size: 13px; padding: 8px; min-height: 36px; cursor: pointer; }
+.sp-connected .now-playing strong { font-size: 18px; }
+
+.yt-bar { display: flex; width: 100%; }
+.yt-bar > * + * { margin-left: 10px; }
+#yt-input { -webkit-flex: 1; flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px; font-size: 16px; color: #fff; background: #2a2a2a; border: 1px solid #444; border-radius: 10px; }
+.yt-btn { background: #c4302b; color: #fff; border: none; border-radius: 10px; padding: 8px 18px; min-height: 44px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.yt-favs { width: 100%; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.yt-fav { display: inline-block; background: #2a2a2a; color: #fff; border: none; border-radius: 999px; padding: 8px 14px; min-height: 40px; margin-right: 8px; font-size: 14px; cursor: pointer; }
+.yt-player-wrap { position: relative; width: 100%; -webkit-flex: 1; flex: 1; min-height: 160px; background: #000; border-radius: 12px; overflow: hidden; }
+/* our buttons sit in a strip above the video so they never cover YouTube's own controls */
+#yt-player, .yt-player-wrap iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+.yt-player-wrap.has-video #yt-player, .yt-player-wrap.has-video iframe { top: 52px; height: auto; bottom: 0; }
+.yt-placeholder { position: absolute; top: 50%; left: 0; right: 0; margin-top: -10px; text-align: center; color: #aaa; color: var(--muted); }
+.yt-tools { position: absolute; top: 4px; right: 4px; z-index: 5; display: none; }
+.yt-player-wrap.has-video .yt-tools { display: block; }
+.yt-tool { width: 44px; height: 44px; margin-left: 6px; border: none; border-radius: 10px; background: rgba(0,0,0,0.6); color: #fff; font-size: 20px; cursor: pointer; }
+.yt-msg { font-size: 14px; color: #ffb74d; text-align: center; }
+.yt-msg:empty { display: none; }
+/* "Fullscreen" fallback for WebViews without the Fullscreen API */
+.yt-player-wrap.yt-max { position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: auto; height: auto; z-index: 1000; border-radius: 0; margin: 0; }
+.yt-player-wrap:-webkit-full-screen { width: 100%; height: 100%; border-radius: 0; }
+.yt-player-wrap:fullscreen { width: 100vw; height: 100vh; border-radius: 0; }
+
+/* Bluetooth how-to */
+.bt-help { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 900; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.bt-help-card { max-width: 520px; width: 100%; line-height: 1.45; }
+.bt-help-card p { margin: 10px 0; }
+.bt-help-small { font-size: 13px; color: #aaa; color: var(--muted); }
+.bt-help-card code { background: #2a2a2a; padding: 1px 5px; border-radius: 4px; }
+.bt-help-actions { margin-top: 14px; display: flex; align-items: center; }
+.bt-help-actions > * + * { margin-left: 12px; }
+.bt-help .yt-btn { background: #1e88e5; background: var(--accent); }
+
 .media-shortcuts { display: flex; flex-direction: column; }
 .media-shortcuts > * + * { margin-top: 12px; }
 .shortcut-btn { background: #2a2a2a; border: none; border-radius: 12px; padding: 12px; color: #fff; cursor: pointer; }
@@ -286,6 +334,8 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
   .home-weather-bottom { margin-top: 10px; }
   .stat { margin-bottom: 4px; }
   .cal-day { min-height: 76px; }
+  .album-art { max-height: 34vh; }
+  .media-panel > * + * { margin-top: 10px; }
 }
 
 /* ===== Phones / very narrow windows: single column, page scrolls ===== */

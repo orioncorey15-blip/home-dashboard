@@ -161,6 +161,7 @@
     // Show a photo right away when arriving at a page that has a slideshow,
     // then let the (single) slideshow timer take over.
     slideshow.onPageChange();
+    if (typeof spotify !== "undefined" && spotify) spotify.onPageChange();
   }
 
   each(document.querySelectorAll(".nav-btn"), function (btn) {
@@ -835,20 +836,19 @@
     } catch (e) { /* fullscreen not allowed */ }
   });
 
-  /* ===== MEDIA (local state only) ===== */
-  var isPlaying = false;
-  var activeSource = "spotify";
+  /* ===== MEDIA: shared state, volume, source buttons ===== */
+  var isPlaying = false;          // demo player state (used only when Spotify isn't connected)
+  var activeSource = "spotify";   // "spotify" or "youtube" (which panel shows)
   var volumeLevel = 60;
   var isMuted = false;
   var connectedOutput = "Bluetooth Speaker";
 
   var playBtn = $("play-btn");
-  var playStatus = $("play-status");
-  var trackInfo = $("track-info");
+  var prevBtn = $("prev-btn");
+  var nextBtn = $("next-btn");
   var volumeSlider = document.querySelector(".volume-slider");
   var muteBtn = document.querySelector(".mute-btn");
   var outputText = document.querySelector(".media-output strong");
-  var homeNowPlaying = $("home-nowplaying-text");
 
   // Paint the filled part of the (custom-styled) volume slider.
   function paintVolume() {
@@ -857,29 +857,57 @@
     volumeSlider.style.backgroundSize = v + "% 14px, 100% 14px";
   }
 
-  function updateNowPlaying() {
-    var text = isPlaying ? String(activeSource).toUpperCase() + " · Playing" : "Not Playing";
-    if (playStatus) playStatus.textContent = isPlaying ? "Playing" : "Not Playing";
-    if (trackInfo) trackInfo.textContent = isPlaying ? "Demo Track · Demo Artist" : "Artist · Album";
-    if (homeNowPlaying) homeNowPlaying.textContent = text;
+  function fmtDuration(ms) {
+    var s = Math.max(0, Math.floor((ms || 0) / 1000));
+    return Math.floor(s / 60) + ":" + pad2(s % 60);
   }
 
-  if (playBtn) playBtn.addEventListener("click", function () {
-    isPlaying = !isPlaying;
-    toggleClass(playBtn, "paused", isPlaying);
-    store.set("isPlaying", isPlaying);
+  // One place decides what the Media page and the Home "now playing" card say.
+  function updateNowPlaying() {
+    var home = "Not Playing";
+    if (youtube.isPlaying()) {
+      home = "YouTube · " + (youtube.title() || "Playing");
+    } else if (spotify.connected()) {
+      home = spotify.homeText();
+    } else if (isPlaying) {
+      home = String(activeSource).toUpperCase() + " · Playing";
+    }
+    if (!spotify.connected()) {
+      setText("play-status", isPlaying ? "Playing" : "Not Playing");
+      setText("track-info", isPlaying ? "Demo Track · Demo Artist" : "Artist · Album");
+      toggleClass(playBtn, "paused", isPlaying);
+    }
+    setText("home-nowplaying-text", home);
+    var out = spotify.deviceName() || connectedOutput;
+    if (outputText && outputText.textContent !== out) outputText.textContent = out;
+  }
+
+  function showMediaPanel(source) {
+    activeSource = source === "youtube" ? "youtube" : "spotify";
+    store.set("activeSource", activeSource);
+    var sp = $("spotify-panel"), yt = $("youtube-panel");
+    if (sp) sp.style.display = activeSource === "spotify" ? "" : "none";
+    if (yt) yt.style.display = activeSource === "youtube" ? "" : "none";
+    each(document.querySelectorAll(".shortcut-btn"), function (b) {
+      toggleClass(b, "active", b.getAttribute("data-source") === activeSource);
+    });
+    if (activeSource === "youtube") youtube.onShow();
     updateNowPlaying();
-  });
+  }
 
   each(document.querySelectorAll(".shortcut-btn"), function (btn) {
     btn.addEventListener("click", function () {
-      each(document.querySelectorAll(".shortcut-btn"), function (b) { b.classList.remove("active"); });
-      btn.classList.add("active");
-      activeSource = btn.getAttribute("data-source");
-      store.set("activeSource", activeSource);
-      updateNowPlaying();
+      var src = btn.getAttribute("data-source");
+      if (src === "bluetooth") { bluetooth.open(); return; }
+      showMediaPanel(src);
     });
   });
+
+  // Volume goes to whichever player is in use: YouTube, Spotify, or (demo) nothing.
+  function applyVolume(v) {
+    if (activeSource === "youtube" && youtube.hasPlayer()) youtube.setVolume(v);
+    else if (spotify.connected()) spotify.setVolume(v);
+  }
 
   function onVolumeInput() {
     var v = Number(volumeSlider.value);
@@ -889,6 +917,7 @@
     store.set("volumeLevel", volumeLevel);
     store.set("isMuted", isMuted);
     paintVolume();
+    applyVolume(v);
   }
   if (volumeSlider) {
     volumeSlider.addEventListener("input", onVolumeInput);
@@ -901,14 +930,690 @@
     paintVolume();
     toggleClass(muteBtn, "active", isMuted);
     store.set("isMuted", isMuted);
+    applyVolume(isMuted ? 0 : (volumeLevel || 60));
   });
+
+  if (playBtn) playBtn.addEventListener("click", function () {
+    if (spotify.connected()) { spotify.togglePlay(); return; }
+    isPlaying = !isPlaying;
+    store.set("isPlaying", isPlaying);
+    updateNowPlaying();
+  });
+  if (prevBtn) prevBtn.addEventListener("click", function () { if (spotify.connected()) spotify.command("previous"); });
+  if (nextBtn) nextBtn.addEventListener("click", function () { if (spotify.connected()) spotify.command("next"); });
+
+  /* ===== SHA-256 (for Spotify's PKCE sign-in; old WebViews have no crypto.subtle) ===== */
+  var sha256 = (function () {
+    var K = [
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    ];
+    function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+    // ASCII input only (the PKCE verifier is [A-Za-z0-9-._~]); returns an array of 32 bytes.
+    return function (str) {
+      var bytes = [], i;
+      for (i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i) & 0xff);
+      var bitLen = bytes.length * 8;
+      bytes.push(0x80);
+      while (bytes.length % 64 !== 56) bytes.push(0);
+      for (i = 7; i >= 0; i--) bytes.push(i > 3 ? 0 : (bitLen >>> (i * 8)) & 0xff);
+      var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+      var W = new Array(64);
+      for (var off = 0; off < bytes.length; off += 64) {
+        for (i = 0; i < 16; i++) {
+          W[i] = (bytes[off + i * 4] << 24) | (bytes[off + i * 4 + 1] << 16) | (bytes[off + i * 4 + 2] << 8) | bytes[off + i * 4 + 3];
+        }
+        for (i = 16; i < 64; i++) {
+          var s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+          var s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+          W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
+        }
+        var a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+        for (i = 0; i < 64; i++) {
+          var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+          var ch = (e & f) ^ (~e & g);
+          var t1 = (h + S1 + ch + K[i] + W[i]) | 0;
+          var S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+          var maj = (a & b) ^ (a & c) ^ (b & c);
+          var t2 = (S0 + maj) | 0;
+          h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+        }
+        H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+        H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+      }
+      var out = [];
+      for (i = 0; i < 8; i++) out.push((H[i] >>> 24) & 0xff, (H[i] >>> 16) & 0xff, (H[i] >>> 8) & 0xff, H[i] & 0xff);
+      return out;
+    };
+  })();
+
+  function base64url(bytes) {
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return window.btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function randomString(len) {
+    var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    var out = "", vals = null, i;
+    var c = window.crypto || window.msCrypto;
+    if (c && c.getRandomValues) { vals = new window.Uint8Array(len); c.getRandomValues(vals); }
+    for (i = 0; i < len; i++) out += chars.charAt((vals ? vals[i] : Math.floor(Math.random() * 256)) % chars.length);
+    return out;
+  }
+
+  function formEncode(obj) {
+    var parts = [];
+    for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) {
+      parts.push(encodeURIComponent(k) + "=" + encodeURIComponent(obj[k]));
+    }
+    return parts.join("&");
+  }
+
+  function parseQuery(qs) {
+    var out = {};
+    each(String(qs || "").replace(/^\?/, "").split("&"), function (p) {
+      if (!p) return;
+      var i = p.indexOf("=");
+      var k = decodeURIComponent((i < 0 ? p : p.slice(0, i)).replace(/\+/g, " "));
+      out[k] = i < 0 ? "" : decodeURIComponent(p.slice(i + 1).replace(/\+/g, " "));
+    });
+    return out;
+  }
+
+  /*
+   * Small XHR helper for Spotify (needs methods + headers + bodies).
+   * cb(err, data, status, xhr); err has .status, .reason (e.g. PREMIUM_REQUIRED), .retryAfter.
+   */
+  function request(method, url, headers, body, cb) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(err, data) {
+      if (finished) return;
+      finished = true;
+      cb(err, data, xhr.status, xhr);
+    }
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = 15000;
+      for (var h in headers) if (Object.prototype.hasOwnProperty.call(headers, h)) xhr.setRequestHeader(h, headers[h]);
+      xhr.onload = function () {
+        var data = null;
+        if (xhr.responseText) { try { data = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ } }
+        if (xhr.status >= 200 && xhr.status < 300) return finish(null, data);
+        var e2 = data && data.error;
+        var err = new Error((e2 && (e2.message || e2)) || (data && data.error_description) || ("HTTP " + xhr.status));
+        err.status = xhr.status;
+        err.reason = (e2 && e2.reason) || (data && typeof data.error === "string" ? data.error : "");
+        err.retryAfter = 0;
+        if (xhr.status === 429) { try { err.retryAfter = Number(xhr.getResponseHeader("Retry-After")) || 0; } catch (e3) { /* not exposed */ } }
+        finish(err, data);
+      };
+      xhr.onerror = function () { var e = new Error("Network error"); e.status = 0; finish(e); };
+      xhr.ontimeout = function () { var e = new Error("Timed out"); e.status = 0; finish(e); };
+      xhr.send(body === undefined ? null : body);
+    } catch (e) {
+      e.status = 0;
+      finish(e);
+    }
+  }
+
+  /* ===== SPOTIFY (now playing + remote; Authorization Code with PKCE, no secret) ===== */
+  var spotify = (function () {
+    var CLIENT_ID = String(CFG.SPOTIFY_CLIENT_ID || "");
+    var ACCOUNTS = "https://accounts.spotify.com";
+    var API = "https://api.spotify.com/v1";
+    var SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+    var FAST_MS = 5000, SLOW_MS = 30000, IDLE_MS = 60000;
+    var CAN_USE = !IS_FILE && !!CLIENT_ID && !!window.btoa;
+
+    var state = null;        // last /me/player response (null = nothing playing)
+    var stateAt = 0;         // when it was fetched (to advance the progress bar)
+    var message = "";
+    var pollTimer = null, tickTimer = null, volTimer = null;
+    var polling = false;
+    var refreshing = null;   // queued callbacks while a token refresh is running
+
+    function redirectUri() {
+      if (CFG.SPOTIFY_REDIRECT_URI) return String(CFG.SPOTIFY_REDIRECT_URI);
+      var base = window.location.protocol + "//" + window.location.host +
+        window.location.pathname.replace(/[^/]*$/, "");
+      return base + "spotify-callback";
+    }
+    function connected() { return CAN_USE && !!store.get("sp_refresh"); }
+
+    function setMessage(text) {
+      message = text || "";
+      setText("sp-message", message);
+    }
+
+    function saveTokens(t) {
+      if (t.access_token) store.set("sp_access", t.access_token);
+      if (t.refresh_token) store.set("sp_refresh", t.refresh_token);
+      store.set("sp_expires", Date.now() + (Number(t.expires_in) || 3600) * 1000);
+    }
+
+    function forget() {
+      try {
+        each(["sp_access", "sp_refresh", "sp_expires", "sp_verifier", "sp_state"], function (k) {
+          window.localStorage.removeItem(k);
+        });
+      } catch (e) { /* ignore */ }
+      state = null;
+    }
+
+    function login() {
+      if (!CAN_USE) return;
+      var verifier = randomString(64);
+      var st = randomString(16);
+      store.set("sp_verifier", verifier);
+      store.set("sp_state", st);
+      window.location.href = ACCOUNTS + "/authorize?" + formEncode({
+        client_id: CLIENT_ID,
+        response_type: "code",
+        redirect_uri: redirectUri(),
+        code_challenge_method: "S256",
+        code_challenge: base64url(sha256(verifier)),
+        scope: SCOPES,
+        state: st
+      });
+    }
+
+    // Back from Spotify's sign-in page (…/spotify-callback?code=…&state=…).
+    function handleCallback() {
+      if (!/spotify-callback\/?$/.test(window.location.pathname)) return false;
+      var q = parseQuery(window.location.search);
+      var verifier = store.get("sp_verifier");
+      var home = window.location.pathname.replace(/spotify-callback\/?$/, "");
+      try { window.history.replaceState(null, "", home || "/"); } catch (e) { /* ignore */ }
+      if (!CAN_USE) return true;
+      if (q.error || !q.code || !verifier || q.state !== store.get("sp_state")) {
+        setMessage(q.error === "access_denied" ? "Spotify sign-in was cancelled." : "Spotify sign-in didn't complete. Try Connect again.");
+        return true;
+      }
+      setMessage("Connecting to Spotify…");
+      request("POST", ACCOUNTS + "/api/token", { "Content-Type": "application/x-www-form-urlencoded" }, formEncode({
+        grant_type: "authorization_code",
+        code: q.code,
+        redirect_uri: redirectUri(),
+        client_id: CLIENT_ID,
+        code_verifier: verifier
+      }), function (err, data) {
+        try { window.localStorage.removeItem("sp_verifier"); window.localStorage.removeItem("sp_state"); } catch (e) { /* ignore */ }
+        if (err || !data || !data.refresh_token) {
+          setMessage("Spotify sign-in failed (" + (err ? err.message : "no token") + "). Try Connect again.");
+          render();
+          return;
+        }
+        saveTokens(data);
+        setMessage("");
+        render();
+        poll();
+      });
+      return true;
+    }
+
+    // cb(err, accessToken). Refreshes when the token is (nearly) expired or force is set.
+    function withToken(cb, force) {
+      var access = store.get("sp_access");
+      if (!force && access && Number(store.get("sp_expires")) - 60000 > Date.now()) return cb(null, access);
+      if (refreshing) { refreshing.push(cb); return; }
+      refreshing = [cb];
+      request("POST", ACCOUNTS + "/api/token", { "Content-Type": "application/x-www-form-urlencoded" }, formEncode({
+        grant_type: "refresh_token",
+        refresh_token: store.get("sp_refresh") || "",
+        client_id: CLIENT_ID
+      }), function (err, data) {
+        var waiting = refreshing; refreshing = null;
+        if (!err && data && data.access_token) saveTokens(data);
+        else if (err && err.status === 400) {
+          // refresh token revoked/expired: must sign in again
+          forget();
+          setMessage("Spotify sign-in expired. Tap Connect Spotify again.");
+          render();
+        }
+        each(waiting, function (fn) { fn(err || (data && data.access_token ? null : new Error("No token")), data && data.access_token); });
+      });
+    }
+
+    // Call the Web API; retries once with a fresh token on 401.
+    function api(method, path, body, cb, retried) {
+      withToken(function (err, token) {
+        if (err) return cb(err);
+        var headers = { "Authorization": "Bearer " + token };
+        if (body !== undefined) headers["Content-Type"] = "application/json";
+        request(method, API + path, headers, body === undefined ? undefined : JSON.stringify(body), function (e, data, status) {
+          if (e && e.status === 401 && !retried) {
+            return withToken(function (e2) { if (e2) return cb(e2); api(method, path, body, cb, true); }, true);
+          }
+          cb(e, data, status);
+        });
+      });
+    }
+
+    function pageVisible() {
+      return !isHidden() && (currentPage === "media" || currentPage === "home");
+    }
+
+    function schedulePoll(ms) {
+      clearTimeout(pollTimer);
+      if (!connected()) return;
+      if (ms === undefined) ms = pageVisible() ? FAST_MS : (isHidden() ? IDLE_MS : SLOW_MS);
+      pollTimer = setTimeout(poll, ms);
+    }
+
+    function poll() {
+      clearTimeout(pollTimer);
+      if (!connected() || polling) return;
+      polling = true;
+      api("GET", "/me/player?additional_types=episode", undefined, function (err, data, status) {
+        polling = false;
+        if (!err) {
+          state = (status === 204 || !data) ? null : data;
+          stateAt = Date.now();
+          if (message && !/Premium/.test(message)) setMessage("");
+          render();
+          schedulePoll();
+          return;
+        }
+        if (err.status === 429) { schedulePoll(Math.max(err.retryAfter * 1000, SLOW_MS)); return; }
+        if (err.status === 403 && /premium/i.test(err.message + " " + err.reason)) setMessage("Controls need Spotify Premium");
+        else if (err.status === 403) setMessage("Spotify said no (" + err.message + "). Is this account on the app's user list?");
+        else if (connected() && err.status) setMessage("Spotify: " + err.message);
+        render();
+        schedulePoll(SLOW_MS);
+      });
+    }
+
+    function onCommandError(err) {
+      if (!err) { setMessage(""); return; }
+      if (err.status === 403 && /premium/i.test(err.message + " " + err.reason)) setMessage("Controls need Spotify Premium");
+      else if (err.status === 404 || err.reason === "NO_ACTIVE_DEVICE") setMessage("No active Spotify device. Start playing on a phone or speaker first.");
+      else if (err.status === 429) setMessage("Spotify is busy, try again in a moment.");
+      else setMessage("Spotify: " + err.message);
+    }
+
+    function command(which) {
+      var map = { next: ["POST", "/me/player/next"], previous: ["POST", "/me/player/previous"],
+                  play: ["PUT", "/me/player/play"], pause: ["PUT", "/me/player/pause"] };
+      var m = map[which];
+      if (!m) return;
+      api(m[0], m[1], undefined, function (err) {
+        onCommandError(err);
+        if (err) { render(); return; }
+        schedulePoll(600); // pick up the new track/state quickly
+      });
+    }
+
+    function togglePlay() {
+      var playing = !!(state && state.is_playing);
+      if (state) { // optimistic update so the button responds instantly
+        state.progress_ms = progressNow();
+        stateAt = Date.now();
+        state.is_playing = !playing;
+        render();
+      }
+      var m = playing ? "pause" : "play";
+      api("PUT", "/me/player/" + m, undefined, function (err) {
+        if (err && state) { state.is_playing = playing; }
+        onCommandError(err);
+        render();
+        schedulePoll(800);
+      });
+    }
+
+    function setVolume(v) {
+      clearTimeout(volTimer);
+      volTimer = setTimeout(function () {
+        api("PUT", "/me/player/volume?volume_percent=" + Math.round(v), undefined, function (err) {
+          onCommandError(err);
+        });
+      }, 400);
+    }
+
+    function progressNow() {
+      if (!state || !state.item) return 0;
+      var p = state.progress_ms || 0;
+      if (state.is_playing) p += Date.now() - stateAt;
+      return Math.min(p, state.item.duration_ms || p);
+    }
+
+    function trackLine(item) {
+      if (!item) return "";
+      if (item.type === "episode") return (item.show && item.show.name) || "Podcast";
+      var artists = [];
+      each(item.artists, function (a) { artists.push(a.name); });
+      return artists.join(", ") + (item.album && item.album.name ? " · " + item.album.name : "");
+    }
+
+    function artUrl(item) {
+      var imgs = (item && ((item.album && item.album.images) || item.images)) || [];
+      if (!imgs.length) return "";
+      // ~300px image (index 1) is plenty for the card; fall back to whatever exists
+      return (imgs[1] || imgs[0]).url || "";
+    }
+
+    function renderProgress() {
+      var item = state && state.item;
+      var dur = item ? item.duration_ms || 0 : 0;
+      var pos = progressNow();
+      var bar = $("sp-progress-bar");
+      if (bar) bar.style.width = (dur ? Math.min(100, pos / dur * 100) : 0).toFixed(2) + "%";
+      setText("sp-pos", fmtDuration(pos));
+      setText("sp-dur", fmtDuration(dur));
+    }
+
+    function tick() {
+      clearTimeout(tickTimer);
+      if (!connected() || !state || !state.is_playing || !pageVisible()) return;
+      renderProgress();
+      var item = state.item;
+      // song probably ended: ask Spotify what's next
+      if (item && progressNow() >= item.duration_ms && !polling) schedulePoll(1000);
+      tickTimer = setTimeout(tick, 1000);
+    }
+
+    function render() {
+      var on = connected();
+      var connectBtn = $("sp-connect"), discBtn = $("sp-disconnect"), note = $("demo-note");
+      if (connectBtn) connectBtn.style.display = (!on && CAN_USE) ? "" : "none";
+      if (discBtn) discBtn.style.display = on ? "" : "none";
+      if (note) note.style.display = on ? "none" : "";
+      var wrap = $("sp-progress-wrap");
+      var art = $("sp-art");
+      var panel = $("spotify-panel");
+      toggleClass(panel, "sp-connected", on);
+      if (!on) {
+        if (wrap) wrap.style.display = "none";
+        if (art) { art.removeAttribute("src"); art.style.display = "none"; }
+        updateNowPlaying();
+        return;
+      }
+      var item = state && state.item;
+      if (item) {
+        setText("play-status", item.name);
+        setText("track-info", trackLine(item));
+      } else {
+        setText("play-status", "Nothing playing on Spotify");
+        setText("track-info", "Start something on a phone or speaker");
+      }
+      toggleClass(playBtn, "paused", !!(state && state.is_playing));
+      var src = artUrl(item);
+      if (art) {
+        if (src) { if (art.getAttribute("src") !== src) art.setAttribute("src", src); art.style.display = "block"; }
+        else { art.removeAttribute("src"); art.style.display = "none"; }
+      }
+      if (wrap) wrap.style.display = item ? "block" : "none";
+      renderProgress();
+      var dev = state && state.device;
+      if (dev && typeof dev.volume_percent === "number" && volumeSlider && activeSource === "spotify" &&
+          !volTimer && document.activeElement !== volumeSlider) {
+        // keep the slider in step with the speaker (unless the user is dragging it)
+        volumeSlider.value = dev.volume_percent;
+        paintVolume();
+      }
+      updateNowPlaying();
+      tick();
+    }
+
+    function homeText() {
+      var item = state && state.item;
+      if (!item) return "Spotify · Nothing playing";
+      return (state.is_playing ? "" : "Paused · ") + item.name + " — " + trackLine(item).split(" · ")[0];
+    }
+
+    function deviceName() { return connected() && state && state.device ? state.device.name : ""; }
+
+    function init() {
+      if ($("sp-connect")) $("sp-connect").addEventListener("click", login);
+      if ($("sp-disconnect")) $("sp-disconnect").addEventListener("click", function () {
+        forget();
+        setMessage("Spotify disconnected.");
+        clearTimeout(pollTimer);
+        render();
+      });
+      var fromCallback = handleCallback();
+      render();
+      if (connected() && !fromCallback) poll();
+      return fromCallback;
+    }
+
+    return {
+      init: init, connected: connected, command: command, togglePlay: togglePlay, setVolume: setVolume,
+      homeText: homeText, deviceName: deviceName,
+      onPageChange: function () { if (connected()) { schedulePoll(currentPage === "media" ? 300 : undefined); tick(); } },
+      refresh: function () { if (connected()) poll(); }
+    };
+  })();
+
+  /* ===== YOUTUBE (IFrame player on the Media page) ===== */
+  var youtube = (function () {
+    var player = null, ready = false, apiLoading = false, apiWaiters = [];
+    var playing = false, currentTitle = "";
+    var FAVS = (CFG.YOUTUBE_FAVORITES && CFG.YOUTUBE_FAVORITES.length) ? CFG.YOUTUBE_FAVORITES : [];
+    var favsDrawn = false;
+
+    // Accepts a bare 11-character ID or any common YouTube link.
+    function parseId(text) {
+      text = String(text || "").replace(/^\s+|\s+$/g, "");
+      if (/^[A-Za-z0-9_-]{11}$/.test(text)) return text;
+      var m = text.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/|\/v\/)([A-Za-z0-9_-]{11})/);
+      return m ? m[1] : "";
+    }
+
+    function msg(text) { setText("yt-msg", text || ""); }
+
+    function loadApi(cb) {
+      if (window.YT && window.YT.Player) return cb(null);
+      apiWaiters.push(cb);
+      if (apiLoading) return;
+      apiLoading = true;
+      var prev = window.onYouTubeIframeAPIReady;
+      var timer = setTimeout(function () { flush(new Error("YouTube didn't load (offline?)")); }, 20000);
+      function flush(err) {
+        clearTimeout(timer);
+        if (err) apiLoading = false;
+        var w = apiWaiters; apiWaiters = [];
+        each(w, function (fn) { fn(err); });
+      }
+      window.onYouTubeIframeAPIReady = function () {
+        if (typeof prev === "function") { try { prev(); } catch (e) { /* ignore */ } }
+        flush(null);
+      };
+      var s = document.createElement("script");
+      s.src = "https://www.youtube.com/iframe_api";
+      s.async = true;
+      s.onerror = function () { if (s.parentNode) s.parentNode.removeChild(s); flush(new Error("YouTube couldn't be reached (offline?)")); };
+      document.getElementsByTagName("head")[0].appendChild(s);
+    }
+
+    function errorText(code) {
+      if (code === 2) return "That doesn't look like a valid YouTube video.";
+      if (code === 5) return "This video can't play in this browser.";
+      if (code === 100) return "Video not found (removed or private).";
+      if (code === 101 || code === 150) return "The owner doesn't allow this video to play outside YouTube. Try another one.";
+      if (code === 152 || code === 153) return "YouTube refused to play here (it needs the site address). Use the https Netlify site, not a local file.";
+      return "YouTube error " + code + ".";
+    }
+
+    function setPlaying(on) {
+      playing = on;
+      if (on) {
+        try { var d = player.getVideoData(); currentTitle = (d && d.title) || currentTitle; } catch (e) { /* ignore */ }
+      }
+      updateNowPlaying();
+    }
+
+    function play(id) {
+      if (!id) { msg("Paste a YouTube link (youtu.be/…, youtube.com/watch?v=…) or an 11-character video ID."); return; }
+      msg("Loading…");
+      var ph = $("yt-placeholder");
+      if (ph) ph.style.display = "none";
+      toggleClass($("yt-wrap"), "has-video", true);
+      currentTitle = "";
+      store.set("ytLast", id);
+      loadApi(function (err) {
+        if (err) { msg(err.message); if (ph) ph.style.display = ""; return; }
+        if (player && ready) { player.loadVideoById(id); msg(""); return; }
+        if (player) { try { player.destroy(); } catch (e) { /* ignore */ } player = null; }
+        ensureHost();
+        var origin = window.location.protocol + "//" + window.location.host;
+        player = new window.YT.Player("yt-player", {
+          width: "100%", height: "100%", videoId: id,
+          playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, fs: 1, origin: origin },
+          events: {
+            onReady: function () {
+              ready = true;
+              msg("");
+              try {
+                player.setVolume(isMuted ? 0 : volumeLevel);
+                player.playVideo();
+              } catch (e) { /* ignore */ }
+            },
+            onStateChange: function (ev) {
+              // 1 = playing, 2 = paused, 0 = ended
+              setPlaying(ev.data === 1 || (ev.data === 3 && playing));
+              if (ev.data === 1) msg("");
+            },
+            onError: function (ev) { msg(errorText(ev.data)); setPlaying(false); }
+          }
+        });
+      });
+    }
+
+    function ensureHost() {
+      if ($("yt-player")) return;
+      var d = document.createElement("div");
+      d.id = "yt-player";
+      var wrap = $("yt-wrap");
+      if (wrap) wrap.insertBefore(d, wrap.firstChild);
+    }
+
+    function stop() {
+      exitMax();
+      if (player) { try { player.destroy(); } catch (e) { /* ignore */ } }
+      player = null; ready = false;
+      ensureHost();
+      var ph = $("yt-placeholder");
+      if (ph) ph.style.display = "";
+      toggleClass($("yt-wrap"), "has-video", false);
+      msg("");
+      setPlaying(false);
+    }
+
+    // Fullscreen: real Fullscreen API where it exists (incl. old webkit names);
+    // otherwise (e.g. Fully Kiosk WebView) stretch the player over the whole screen.
+    function fsElement() {
+      return document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement || null;
+    }
+    function exitMax() {
+      var wrap = $("yt-wrap");
+      if (wrap && wrap.classList.contains("yt-max")) { wrap.classList.remove("yt-max"); document.body.classList.remove("yt-max-open"); }
+      if (fsElement()) {
+        try {
+          if (document.exitFullscreen) document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          else if (document.webkitCancelFullScreen) document.webkitCancelFullScreen();
+        } catch (e) { /* ignore */ }
+      }
+    }
+    function toggleFullscreen() {
+      var wrap = $("yt-wrap");
+      if (!wrap) return;
+      if (fsElement() || wrap.classList.contains("yt-max")) { exitMax(); return; }
+      var req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.webkitRequestFullScreen;
+      var fallback = function () { wrap.classList.add("yt-max"); document.body.classList.add("yt-max-open"); };
+      if (!req || !(document.fullscreenEnabled || document.webkitFullscreenEnabled)) { fallback(); return; }
+      try {
+        var p = req.call(wrap);
+        if (p && typeof p.then === "function") p.then(null, fallback);
+      } catch (e) { fallback(); }
+    }
+
+    function drawFavs() {
+      if (favsDrawn) return;
+      favsDrawn = true;
+      var box = $("yt-favs");
+      if (!box) return;
+      if (!FAVS.length) { box.style.display = "none"; return; }
+      each(FAVS, function (f) {
+        var id = parseId(f && (f.id || f.url));
+        if (!id) return;
+        var b = document.createElement("button");
+        b.className = "yt-fav";
+        b.textContent = (f && f.title) || id;
+        b.addEventListener("click", function () { play(id); });
+        box.appendChild(b);
+      });
+    }
+
+    function init() {
+      var go = $("yt-go"), input = $("yt-input");
+      if (go) go.addEventListener("click", function () { play(parseId(input && input.value)); if (input) input.blur(); });
+      if (input) input.addEventListener("keydown", function (e) {
+        if (e.keyCode === 13) { play(parseId(input.value)); input.blur(); }
+      });
+      if ($("yt-fs")) $("yt-fs").addEventListener("click", toggleFullscreen);
+      if ($("yt-stop")) $("yt-stop").addEventListener("click", stop);
+      document.addEventListener("keydown", function (e) { if (e.keyCode === 27) exitMax(); });
+    }
+
+    return {
+      init: init, play: play, stop: stop, parseId: parseId,
+      onShow: drawFavs,
+      isPlaying: function () { return playing; },
+      title: function () { return currentTitle; },
+      hasPlayer: function () { return !!(player && ready); },
+      setVolume: function (v) {
+        try { if (v > 0) { player.unMute(); player.setVolume(v); } else player.mute(); } catch (e) { /* ignore */ }
+      }
+    };
+  })();
+
+  /* ===== BLUETOOTH button ===== */
+  // Android can't be told to pair a speaker from a web page, but it can open the Bluetooth
+  // settings screen. Fully Kiosk does this via its JavaScript Interface (PLUS licence) or
+  // via an intent: link (free "Open Other URL Schemes" setting). Otherwise show a how-to.
+  var bluetooth = (function () {
+    var INTENT = "intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end";
+    function intentWithFallback() {
+      // Chrome goes to browser_fallback_url if it can't open the intent (instead of an error page).
+      var back = window.location.href.split("#")[0];
+      return "intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;S.browser_fallback_url=" +
+        encodeURIComponent(back) + ";end";
+    }
+    function showHelp(on) {
+      var h = $("bt-help");
+      if (h) h.style.display = on ? "" : "none";
+    }
+    function tryIntentUrl() {
+      window.location.href = intentWithFallback();
+    }
+    function open() {
+      var f = window.fully;
+      if (f && typeof f.startIntent === "function") {
+        try { f.startIntent(INTENT); return; } catch (e) { /* fall through to the how-to */ }
+      }
+      if (CFG.BLUETOOTH_OPEN_VIA_INTENT_URL === true) { tryIntentUrl(); return; }
+      showHelp(true);
+    }
+    function init() {
+      if ($("bt-close")) $("bt-close").addEventListener("click", function () { showHelp(false); });
+      if ($("bt-try")) $("bt-try").addEventListener("click", function () { showHelp(false); tryIntentUrl(); });
+      if ($("bt-help")) $("bt-help").addEventListener("click", function (e) { if (e.target === $("bt-help")) showHelp(false); });
+    }
+    return { init: init, open: open, INTENT: INTENT };
+  })();
 
   function restoreMediaState() {
     var savedPlaying = store.get("isPlaying");
-    if (savedPlaying !== null) {
-      isPlaying = savedPlaying === "true";
-      toggleClass(playBtn, "paused", isPlaying);
-    }
+    if (savedPlaying !== null) isPlaying = savedPlaying === "true";
     var savedVol = store.get("volumeLevel");
     if (savedVol !== null && !isNaN(Number(savedVol))) {
       volumeLevel = Number(savedVol);
@@ -919,31 +1624,28 @@
       if (volumeSlider) volumeSlider.value = 0;
       toggleClass(muteBtn, "active", true);
     }
-    var savedSource = store.get("activeSource");
-    if (savedSource) {
-      activeSource = savedSource;
-      each(document.querySelectorAll(".shortcut-btn"), function (btn) {
-        toggleClass(btn, "active", btn.getAttribute("data-source") === savedSource);
-      });
-    }
     var savedOutput = store.get("connectedOutput");
-    if (savedOutput && outputText) {
-      connectedOutput = savedOutput;
-      outputText.textContent = connectedOutput;
-    }
-    updateNowPlaying();
+    if (savedOutput) connectedOutput = savedOutput;
+    var savedSource = store.get("activeSource");
+    youtube.init();
+    bluetooth.init();
+    var fromCallback = spotify.init();
+    showMediaPanel(fromCallback ? "spotify" : (savedSource === "youtube" ? "youtube" : "spotify"));
     paintVolume();
+    return fromCallback;
   }
-  restoreMediaState();
+  var cameFromSpotify = restoreMediaState();
+  // debug/testing hook (harmless): lets tests and the console reach the media modules
+  window.__dashMedia = { spotify: spotify, youtube: youtube, bluetooth: bluetooth, sha256: sha256, base64url: base64url };
 
   /* ===== RECOVERY ===== */
   // Back online after a Wi-Fi drop: refresh anything that has gone stale.
-  window.addEventListener("online", function () { refreshStale(60 * 1000); });
+  window.addEventListener("online", function () { refreshStale(60 * 1000); spotify.refresh(); });
 
   // Screen turned back on: resume the slideshow and refresh stale data.
   function onVisibility() {
     slideshow.schedule();
-    if (!isHidden()) refreshStale(5 * 60 * 1000);
+    if (!isHidden()) { refreshStale(5 * 60 * 1000); spotify.onPageChange(); }
   }
   document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("webkitvisibilitychange", onVisibility);
@@ -963,14 +1665,14 @@
   })();
 
   /* ===== INIT ===== */
-  showPage("home");
+  showPage(cameFromSpotify ? "media" : "home");
   renderCalendarAll();
   weatherTask.run();
   calendarTask.run();
   photosTask.run();
   if (!HAS_CONFIG) {
-    setText("home-desc", "config.js missing - copy config.example.js to config.js");
+    setText("home-desc", "config.js missing");
     setText("weather-desc", "config.js missing");
-    if (window.console) console.error("config.js is missing: copy config.example.js to config.js and fill in your keys");
+    if (window.console) console.error("config.js is missing: it should sit next to index.html (see README)");
   }
 })();

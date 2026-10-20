@@ -137,24 +137,54 @@
       <section class="page" id="media">
         <div class="media-layout">
           <div class="card media-nowplaying">
-            <div class="album-art">Album Art</div>
-            <div class="now-playing">
-              <strong id="play-status">Not Playing</strong><br>
-              <span id="track-info">Artist · Album</span>
+            <!-- SPOTIFY (or demo controls when Spotify isn't connected) -->
+            <div class="media-panel" id="spotify-panel">
+              <div class="album-art"><img id="sp-art" alt="" referrerpolicy="no-referrer"><span class="album-art-label">Album Art</span></div>
+              <div class="now-playing">
+                <strong id="play-status">Not Playing</strong><br>
+                <span id="track-info">Artist · Album</span>
+              </div>
+              <div class="sp-progress-wrap" id="sp-progress-wrap">
+                <div class="sp-progress"><div class="sp-progress-bar" id="sp-progress-bar"></div></div>
+                <div class="sp-times"><span id="sp-pos">0:00</span><span id="sp-dur">0:00</span></div>
+              </div>
+              <div class="media-controls">
+                <button class="icon-btn" id="prev-btn" aria-label="Previous">
+                  <svg viewBox="0 0 24 24"><polygon points="15,6 9,12 15,18"></polygon><rect x="6" y="6" width="2" height="12"></rect></svg>
+                </button>
+                <button class="icon-btn play" id="play-btn" aria-label="Play / Pause">
+                  <svg viewBox="0 0 24 24" class="play-icon"><polygon points="8,5 19,12 8,19"></polygon></svg>
+                  <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5" width="4" height="14"></rect><rect x="13" y="5" width="4" height="14"></rect></svg>
+                </button>
+                <button class="icon-btn" id="next-btn" aria-label="Next">
+                  <svg viewBox="0 0 24 24"><polygon points="9,6 15,12 9,18"></polygon><rect x="16" y="6" width="2" height="12"></rect></svg>
+                </button>
+              </div>
+              <div class="sp-message" id="sp-message"></div>
+              <div class="demo-note" id="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
+              <div class="sp-account">
+                <button class="sp-connect-btn" id="sp-connect" style="display:none">Connect Spotify</button>
+                <button class="link-btn" id="sp-disconnect" style="display:none">Disconnect Spotify</button>
+              </div>
             </div>
-            <div class="media-controls">
-              <button class="icon-btn" id="prev-btn" aria-label="Previous">
-                <svg viewBox="0 0 24 24"><polygon points="15,6 9,12 15,18"></polygon><rect x="6" y="6" width="2" height="12"></rect></svg>
-              </button>
-              <button class="icon-btn play" id="play-btn" aria-label="Play / Pause">
-                <svg viewBox="0 0 24 24" class="play-icon"><polygon points="8,5 19,12 8,19"></polygon></svg>
-                <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5" width="4" height="14"></rect><rect x="13" y="5" width="4" height="14"></rect></svg>
-              </button>
-              <button class="icon-btn" id="next-btn" aria-label="Next">
-                <svg viewBox="0 0 24 24"><polygon points="9,6 15,12 9,18"></polygon><rect x="16" y="6" width="2" height="12"></rect></svg>
-              </button>
+
+            <!-- YOUTUBE -->
+            <div class="media-panel" id="youtube-panel" style="display:none">
+              <div class="yt-bar">
+                <input type="text" id="yt-input" placeholder="Paste a YouTube link or video ID" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <button class="yt-btn" id="yt-go">Play</button>
+              </div>
+              <div class="yt-favs" id="yt-favs"></div>
+              <div class="yt-player-wrap" id="yt-wrap">
+                <div id="yt-player"></div>
+                <div class="yt-placeholder" id="yt-placeholder">Pick a favourite or paste a link</div>
+                <div class="yt-tools">
+                  <button class="yt-tool" id="yt-fs" aria-label="Fullscreen">⛶</button>
+                  <button class="yt-tool" id="yt-stop" aria-label="Stop">✕</button>
+                </div>
+              </div>
+              <div class="yt-msg" id="yt-msg"></div>
             </div>
-            <div class="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
           </div>
 
           <div class="media-shortcuts">
@@ -182,6 +212,22 @@
           </div>
         </div>
       </section>
+
+      <!-- BLUETOOTH HOW-TO (shown when the button can't open settings by itself) -->
+      <div class="bt-help" id="bt-help" style="display:none">
+        <div class="card bt-help-card">
+          <h3>Bluetooth</h3>
+          <p>To connect a speaker: swipe down from the top of the screen and long-press the <b>Bluetooth</b> icon,
+             or open <b>Settings → Connections → Bluetooth</b>.</p>
+          <p class="bt-help-small">Want this button to open Bluetooth settings directly? In Fully Kiosk turn on
+             <b>Settings → Web Content Settings → Open Other URL Schemes</b>, then set
+             <code>BLUETOOTH_OPEN_VIA_INTENT_URL: true</code> in config.js.</p>
+          <div class="bt-help-actions">
+            <button class="yt-btn" id="bt-try">Try opening Bluetooth settings</button>
+            <button class="link-btn" id="bt-close">Close</button>
+          </div>
+        </div>
+      </div>
 
       <!-- PHOTOS -->
       <section class="page" id="photos">
