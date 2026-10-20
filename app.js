@@ -9,6 +9,10 @@
 
   var CFG = (typeof CONFIG !== "undefined" && CONFIG) ? CONFIG : {};
   var SLIDE_MS = Number(CFG.SLIDESHOW_INTERVAL) > 1000 ? Number(CFG.SLIDESHOW_INTERVAL) : 8000;
+  var HAS_CONFIG = typeof CONFIG !== "undefined" && !!CONFIG;
+  // "drive" (default) = public Google Drive folder; "local" = photos/ folder next to index.html
+  var PHOTO_SOURCE = String(CFG.PHOTO_SOURCE || "drive").toLowerCase() === "local" ? "local" : "drive";
+  var IS_FILE = window.location.protocol === "file:";
 
   /* ===== HELPERS ===== */
   function $(id) { return document.getElementById(id); }
@@ -127,6 +131,9 @@
   }
 
   /* ===== NAVIGATION ===== */
+  // Kiosk browsers (Fully Kiosk etc.) are already fullscreen and usually
+  // don't support the Fullscreen API, so only show the button where it works.
+  var FS_SUPPORTED = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
   var currentPage = "home";
 
   function showPage(pageId) {
@@ -141,7 +148,7 @@
     if (pageId !== "home") toggleClass($("sidebar"), "open", false);
 
     var fsBtn = $("fs-btn");
-    if (fsBtn) fsBtn.style.display = pageId === "photos" ? "block" : "none";
+    if (fsBtn) fsBtn.style.display = (pageId === "photos" && FS_SUPPORTED) ? "block" : "none";
 
     // Show a photo right away when arriving at a page that has a slideshow,
     // then let the (single) slideshow timer take over.
@@ -205,6 +212,7 @@
     if (now.getHours() !== Number(hour) || now.getMinutes() > 10) return;
     if (Date.now() - startedAt < 60 * 60 * 1000) return; // loaded recently already
     reloadPending = true;
+    if (IS_FILE) { window.location.reload(); return; } // local file: always reachable
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "index.html?ping=" + Date.now(), true);
     xhr.timeout = 15000;
@@ -556,6 +564,7 @@
     return Math.max(640, Math.min(1920, Math.round(px)));
   }
   function photoUrl(id, forHome) {
+    if (PHOTO_SOURCE === "local") return "photos/" + encodeURIComponent(id);
     return "https://lh3.googleusercontent.com/d/" + id + "=s" + photoSize(forHome);
   }
 
@@ -647,7 +656,13 @@
       (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
   }
 
-  var photosTask = makeTask("Drive photos", function (done) {
+  // Remember the last Drive photo list so the slideshow can start even if the
+  // tablet boots without Wi-Fi (already-viewed photos come from the cache).
+  function cachedDriveList() {
+    try { var l = JSON.parse(store.get("drivePhotoIds") || "[]"); return l && l.length ? l : null; } catch (e) { return null; }
+  }
+
+  function loadDrivePhotos(done) {
     if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) return done(true);
     var found = [];
     var pages = 0;
@@ -655,17 +670,59 @@
       getJSON(driveUrl(token), function (err, data) {
         if (err || !data) {
           if (window.console) console.error("Drive photo load failed:", err);
+          var cached = cachedDriveList();
+          if (cached) slideshow.setList(cached);
           return done(false);
         }
         (data.files || []).forEach(function (f) {
           if (f.mimeType && f.mimeType.indexOf("image/") === 0) found.push(f.id);
         });
         if (data.nextPageToken && ++pages < 10) return fetchPage(data.nextPageToken);
-        if (found.length) slideshow.setList(found);
+        if (found.length) {
+          slideshow.setList(found);
+          store.set("drivePhotoIds", JSON.stringify(found));
+        }
         done(true);
       });
     })(null);
-  }, 60 * 60 * 1000); // pick up newly added photos hourly
+  }
+
+  /*
+   * Local photos: photos/photos.js (made by make-photo-list.bat / .sh) sets
+   * window.LOCAL_PHOTOS = ["a.jpg", ...]. Loaded with a <script> tag because
+   * that works from file:// on every browser (XHR/directory listing doesn't).
+   */
+  var localScript = null;
+  function loadLocalPhotos(done) {
+    if (localScript && localScript.parentNode) localScript.parentNode.removeChild(localScript);
+    window.LOCAL_PHOTOS = null;
+    var el = document.createElement("script");
+    var finished = false;
+    function finish(ok) {
+      if (finished) return;
+      finished = true;
+      el.onload = el.onerror = null;
+      var list = [];
+      each(window.LOCAL_PHOTOS || [], function (name) {
+        if (typeof name === "string" && /\.(jpe?g|png|gif|webp)$/i.test(name)) list.push(name);
+      });
+      if (list.length) slideshow.setList(list);
+      else if (window.console) console.warn("No local photos listed in photos/photos.js");
+      done(ok);
+    }
+    el.onload = function () { finish(true); };
+    el.onerror = function () {
+      if (window.console) console.warn("photos/photos.js not found - run make-photo-list after adding photos");
+      finish(false);
+    };
+    el.src = "photos/photos.js?t=" + Date.now();
+    localScript = el;
+    document.getElementsByTagName("head")[0].appendChild(el);
+  }
+
+  var photosTask = makeTask("Photos", function (done) {
+    if (PHOTO_SOURCE === "local") loadLocalPhotos(done); else loadDrivePhotos(done);
+  }, 60 * 60 * 1000); // pick up added/removed photos hourly
 
   /* Fullscreen (with old webkit-prefixed fallback) */
   if ($("fs-btn")) $("fs-btn").addEventListener("click", function () {
@@ -793,4 +850,9 @@
   weatherTask.run();
   calendarTask.run();
   photosTask.run();
+  if (!HAS_CONFIG) {
+    setText("home-desc", "config.js missing - copy config.example.js to config.js");
+    setText("weather-desc", "config.js missing");
+    if (window.console) console.error("config.js is missing: copy config.example.js to config.js and fill in your keys");
+  }
 })();

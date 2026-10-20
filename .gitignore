@@ -1,0 +1,8 @@
+# Real keys/settings live only on the tablet (copy config.example.js -> config.js)
+config.js
+
+# Personal photos and the generated list stay out of the repo
+photos/*
+!photos/README.txt
+!photos/make-photo-list.bat
+!photos/make-photo-list.sh

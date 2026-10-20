@@ -4,7 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Home Dashboard</title>
-  <link rel="manifest" href="manifest.json">
+  <script>
+    // The PWA manifest only works over http(s); skip it when opened as a local file:// page.
+    if (location.protocol.indexOf("http") === 0) {
+      var m = document.createElement("link"); m.rel = "manifest"; m.href = "manifest.json";
+      document.head.appendChild(m);
+    }
+  </script>
   <link rel="stylesheet" href="style.css">
   <meta name="theme-color" content="#121212">
   <meta name="mobile-web-app-capable" content="yes">
