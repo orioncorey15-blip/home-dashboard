@@ -177,6 +177,7 @@
   var lastDay = dayKey(new Date());
   var startedAt = Date.now();
   var reloadPending = false;
+  var lastNightCheck = 0;
 
   function updateClock() {
     var now = new Date();
@@ -201,6 +202,10 @@
     }
 
     maybeDailyReload(now);
+    if (now.getSeconds() === 0 || nowMs - lastNightCheck > 61000) {
+      lastNightCheck = nowMs;
+      if (typeof applyNightSchedule === "function") applyNightSchedule(now);
+    }
   }
 
   // Once a day, reload the page to clear any memory build-up in old browsers
@@ -227,14 +232,53 @@
   updateClock();
   setInterval(updateClock, 1000);
 
-  /* ===== NIGHT MODE ===== */
+  /* ===== NIGHT MODE (manual button + optional schedule) ===== */
+  // NIGHT_MODE_START / NIGHT_MODE_END are hours 0-23 (e.g. 22 and 6). null turns the schedule off.
+  // The button always works; the schedule re-applies at the next start/end time.
   var nightBtn = $("night-toggle");
+  function validHour(h) { return typeof h === "number" && h >= 0 && h <= 23 && Math.floor(h) === h; }
+  var NIGHT_START = CFG.NIGHT_MODE_START, NIGHT_END = CFG.NIGHT_MODE_END;
+  var NIGHT_SCHEDULED = validHour(NIGHT_START) && validHour(NIGHT_END) && NIGHT_START !== NIGHT_END;
+
+  function isNightHour(h) {
+    return NIGHT_START < NIGHT_END ? (h >= NIGHT_START && h < NIGHT_END) : (h >= NIGHT_START || h < NIGHT_END);
+  }
+  // Identifies the current scheduled period by its starting boundary (e.g. "night@2026-10-20 22").
+  function nightPeriodKey(now) {
+    var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+    var night = isNightHour(t.getHours());
+    for (var i = 0; i < 48; i++) {
+      var prev = new Date(t.getTime() - 3600000);
+      if (isNightHour(prev.getHours()) !== night) break;
+      t = prev;
+    }
+    return (night ? "night@" : "day@") + dayKey(t) + " " + t.getHours();
+  }
+
   function setNight(on) {
     toggleClass(document.body, "night", on);
     if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
     store.set("nightMode", on);
+    if (NIGHT_SCHEDULED) store.set("nightModePeriod", nightPeriodKey(new Date()));
   }
-  if (store.get("nightMode") === "true") setNight(true);
+
+  var lastNightPeriod = null;
+  function applyNightSchedule(now) {
+    if (!NIGHT_SCHEDULED) return;
+    var key = nightPeriodKey(now);
+    if (key === lastNightPeriod) return;
+    var first = lastNightPeriod === null;
+    lastNightPeriod = key;
+    // On start-up keep a manual choice made earlier in this same period (e.g. across the 3 AM reload).
+    if (first && store.get("nightModePeriod") === key && store.get("nightMode") !== null) {
+      setNight(store.get("nightMode") === "true");
+    } else {
+      setNight(isNightHour(now.getHours()));
+    }
+  }
+
+  if (NIGHT_SCHEDULED) applyNightSchedule(new Date());
+  else if (store.get("nightMode") === "true") setNight(true);
   if (nightBtn) nightBtn.addEventListener("click", function () {
     setNight(!document.body.classList.contains("night"));
   });
@@ -517,6 +561,18 @@
     grid.appendChild(frag);
   }
 
+  // "3:00 PM" for timed events starting today, "All day" for all-day events.
+  // A timed event that began on an earlier day shows when it ends today ("Until 11:00 AM"),
+  // or "All day" if it runs through the whole day.
+  function todayEventTime(ev, dayStart) {
+    if (!ev.start || !ev.start.dateTime) return "All day";
+    var s = parseEventDate(ev);
+    if (s >= dayStart) return fmtTime(s);
+    var e = parseEventEnd(ev);
+    var dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 23, 59, 59, 999);
+    return e && e < dayEnd ? "Until " + fmtTime(new Date(e.getTime() + 1)) : "All day";
+  }
+
   function renderToday(events) {
     var container = $("today-events");
     var dateEl = $("today-date");
@@ -541,7 +597,11 @@
     todays.forEach(function (ev) {
       var div = document.createElement("div");
       div.className = "today-event" + (isHolidayEvent(ev) ? " holiday" : "");
-      div.textContent = ev.summary || "Untitled";
+      var time = document.createElement("span");
+      time.className = "today-event-time";
+      time.textContent = todayEventTime(ev, dayStart);
+      div.appendChild(time);
+      div.appendChild(document.createTextNode(ev.summary || "Untitled"));
       container.appendChild(div);
     });
   }
@@ -577,9 +637,27 @@
     var ids = [];
     var timer = null;
     var fadeTimer = null;
+    var loadedOnce = false;
     var homeImg = $("home-slideshow-img");
     var frameImg = $("photo-frame-img");
     var state = { home: { idx: 0, shown: -1, errors: 0 }, photos: { idx: 0, shown: -1, errors: 0 } };
+
+    var emptyEls = [$("home-photo-empty"), $("photo-frame-empty")];
+
+    // Friendly message instead of a blank frame. title=null hides it.
+    function setEmpty(title, hint) {
+      each(emptyEls, function (el) {
+        if (!el) return;
+        if (!title) { toggleClass(el, "show", false); return; }
+        el.innerHTML = "";
+        var icon = document.createElement("div"); icon.className = "photo-empty-icon";
+        icon.innerHTML = '<svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5z"/></svg>';
+        var t = document.createElement("div"); t.className = "photo-empty-title"; t.textContent = title;
+        el.appendChild(icon); el.appendChild(t);
+        if (hint) { var h = document.createElement("div"); h.className = "photo-empty-hint"; h.textContent = hint; el.appendChild(h); }
+        toggleClass(el, "show", true);
+      });
+    }
 
     function imgFor(page) { return page === "home" ? homeImg : (page === "photos" ? frameImg : null); }
 
@@ -604,6 +682,8 @@
     function handleLoad(page) {
       return function () {
         state[page].errors = 0;
+        loadedOnce = true;
+        setEmpty(null);
         if (page === "home") homeImg.style.opacity = "1";
       };
     }
@@ -614,6 +694,7 @@
         s.errors++;
         if (window.console) console.warn("Photo failed to load, skipping");
         if (s.errors < Math.min(ids.length, 5)) show(page, s.idx + 1); // otherwise wait for next tick
+        else if (!loadedOnce) setEmpty("Photos couldn't load", "Will try again shortly.");
       };
     }
     if (homeImg) { homeImg.onload = handleLoad("home"); homeImg.onerror = handleError("home"); }
@@ -636,7 +717,19 @@
       schedule();
     }
 
-    function setList(newIds) {
+    // emptyHint: message to show if newIds is empty (e.g. where to add photos).
+    function setList(newIds, emptyHint) {
+      if (!newIds.length) {
+        ids = [];
+        clearTimeout(timer); clearTimeout(fadeTimer); timer = null;
+        loadedOnce = false;
+        if (homeImg) homeImg.removeAttribute("src");
+        if (frameImg) frameImg.removeAttribute("src");
+        state.home = { idx: 0, shown: -1, errors: 0 };
+        state.photos = { idx: 0, shown: -1, errors: 0 };
+        setEmpty("No photos yet", emptyHint || "");
+        return;
+      }
       var same = newIds.length === ids.length && newIds.slice().sort().join() === ids.slice().sort().join();
       if (same) return;
       ids = shuffle(newIds.slice());
@@ -645,7 +738,9 @@
       onPageChange();
     }
 
-    return { setList: setList, onPageChange: onPageChange, schedule: schedule };
+    function hasPhotos() { return ids.length > 0; }
+
+    return { setList: setList, onPageChange: onPageChange, schedule: schedule, hasPhotos: hasPhotos };
   })();
 
   function driveUrl(pageToken) {
@@ -663,7 +758,10 @@
   }
 
   function loadDrivePhotos(done) {
-    if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) return done(true);
+    if (!CFG.DRIVE_API_KEY || !CFG.DRIVE_FOLDER_ID) {
+      slideshow.setList([], "Set DRIVE_API_KEY and DRIVE_FOLDER_ID in config.js.");
+      return done(true);
+    }
     var found = [];
     var pages = 0;
     (function fetchPage(token) {
@@ -672,16 +770,15 @@
           if (window.console) console.error("Drive photo load failed:", err);
           var cached = cachedDriveList();
           if (cached) slideshow.setList(cached);
+          else if (!slideshow.hasPhotos()) slideshow.setList([], "Couldn't reach Google Drive. Will try again shortly.");
           return done(false);
         }
         (data.files || []).forEach(function (f) {
           if (f.mimeType && f.mimeType.indexOf("image/") === 0) found.push(f.id);
         });
         if (data.nextPageToken && ++pages < 10) return fetchPage(data.nextPageToken);
-        if (found.length) {
-          slideshow.setList(found);
-          store.set("drivePhotoIds", JSON.stringify(found));
-        }
+        slideshow.setList(found, "Add photos to your Google Drive photo folder.");
+        store.set("drivePhotoIds", JSON.stringify(found));
         done(true);
       });
     })(null);
@@ -706,8 +803,8 @@
       each(window.LOCAL_PHOTOS || [], function (name) {
         if (typeof name === "string" && /\.(jpe?g|png|gif|webp)$/i.test(name)) list.push(name);
       });
-      if (list.length) slideshow.setList(list);
-      else if (window.console) console.warn("No local photos listed in photos/photos.js");
+      if (!list.length && window.console) console.warn("No local photos listed in photos/photos.js");
+      slideshow.setList(list, "Add photos to the photos folder, then run make-photo-list.");
       done(ok);
     }
     el.onload = function () { finish(true); };
@@ -760,6 +857,13 @@
   var outputText = document.querySelector(".media-output strong");
   var homeNowPlaying = $("home-nowplaying-text");
 
+  // Paint the filled part of the (custom-styled) volume slider.
+  function paintVolume() {
+    if (!volumeSlider) return;
+    var v = Math.max(0, Math.min(100, Number(volumeSlider.value) || 0));
+    volumeSlider.style.backgroundSize = v + "% 14px, 100% 14px";
+  }
+
   function updateNowPlaying() {
     var text = isPlaying ? String(activeSource).toUpperCase() + " · Playing" : "Not Playing";
     if (playStatus) playStatus.textContent = isPlaying ? "Playing" : "Not Playing";
@@ -784,18 +888,24 @@
     });
   });
 
-  if (volumeSlider) volumeSlider.addEventListener("input", function () {
+  function onVolumeInput() {
     var v = Number(volumeSlider.value);
     isMuted = v === 0;
     if (!isMuted) volumeLevel = v; // remember last non-zero level for un-mute
     toggleClass(muteBtn, "active", isMuted);
     store.set("volumeLevel", volumeLevel);
     store.set("isMuted", isMuted);
-  });
+    paintVolume();
+  }
+  if (volumeSlider) {
+    volumeSlider.addEventListener("input", onVolumeInput);
+    volumeSlider.addEventListener("change", onVolumeInput); // very old WebViews only fire "change"
+  }
 
   if (muteBtn) muteBtn.addEventListener("click", function () {
     isMuted = !isMuted;
     if (volumeSlider) volumeSlider.value = isMuted ? 0 : (volumeLevel || 60);
+    paintVolume();
     toggleClass(muteBtn, "active", isMuted);
     store.set("isMuted", isMuted);
   });
@@ -829,6 +939,7 @@
       outputText.textContent = connectedOutput;
     }
     updateNowPlaying();
+    paintVolume();
   }
   restoreMediaState();
 

@@ -19,6 +19,12 @@ var CONFIG = {
   // Optional: change photo slideshow interval (ms)
   SLIDESHOW_INTERVAL: 8000,
 
+  // Optional: turn night mode on/off automatically (hours 0-23). The Night Mode
+  // button still works; the schedule takes over again at the next start/end time.
+  // Set both to null to turn the schedule off.
+  NIGHT_MODE_START: 22,
+  NIGHT_MODE_END: 6,
+
   // Optional: reload the page once a day at this hour (0-23) to free memory.
   // Set to null to turn off.
   DAILY_RELOAD_HOUR: 3

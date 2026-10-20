@@ -29,7 +29,7 @@ button { font-family: inherit; }
    change (slideshow fades, clock ticks) which is heavy for old tablet GPUs. */
 body.night::after {
   content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.45); pointer-events: none; z-index: 9999;
+  background: rgba(0, 0, 0, 0.65); pointer-events: none; z-index: 9999;
 }
 body.night .card { background: #111; }
 
@@ -105,6 +105,7 @@ body.home-active #header { display: none; }
 .today-events { font-size: 14px; -webkit-flex: 1; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .today-event { background: #2a2a2a; padding: 6px 10px; border-radius: 8px; margin-bottom: 6px; word-wrap: break-word; overflow-wrap: break-word; }
 .today-event.holiday { background: #2e7d32; }
+.today-event-time { font-weight: 600; opacity: 0.85; margin-right: 8px; white-space: nowrap; }
 
 .home-slideshow { width: 100%; height: 100%; }
 .slideshow-card .home-slideshow { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
@@ -114,6 +115,18 @@ body.home-active #header { display: none; }
 }
 /* Hide the broken-image icon before the first photo arrives */
 .home-slideshow img:not([src]), #photo-frame-img:not([src]) { visibility: hidden; }
+
+/* "No photos yet" message shown instead of a blank frame */
+.photo-empty {
+  display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  -webkit-flex-direction: column; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px; text-align: center; color: #aaa; color: var(--muted); background: #1b1b1b;
+}
+#photo-frame-empty { background: #000; }
+.photo-empty.show { display: -webkit-flex; display: flex; }
+.photo-empty-icon { opacity: 0.45; line-height: 0; }
+.photo-empty-title { font-size: 18px; font-weight: 600; color: #ddd; margin-top: 10px; }
+.photo-empty-hint { font-size: 13px; margin-top: 6px; max-width: 320px; }
 
 .night-btn {
   background: #2a2a2a; color: #fff; border: none; border-radius: 12px;
@@ -128,12 +141,15 @@ body.night .night-btn { background: #1e88e5; background: var(--accent); }
 }
 body:not(.home-active) #menuToggle { display: none; }
 body.home-active #sidebar {
+  /* On Home the menu is hidden and slides in over the content, so it doesn't
+     reserve a blank 72px column on the left (content uses the full width). */
+  position: fixed; top: 0; bottom: 0; left: 0;
   /* push the nav buttons below the ☰ button so it doesn't cover "Home" */
   padding-top: 72px;
   -webkit-transform: translateX(-100%); transform: translateX(-100%);
   -webkit-transition: -webkit-transform 0.25s; transition: transform 0.25s;
 }
-body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: translateX(0); }
+body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: translateX(0); box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5); }
 
 /* Weather page */
 .weather-top { display: flex; margin-bottom: 20px; }
@@ -167,6 +183,7 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
   .album-art { height: auto; aspect-ratio: 1; }
 }
 .media-controls { display: flex; }
+.demo-note { font-size: 12px; color: #aaa; color: var(--muted); opacity: 0.8; text-align: center; letter-spacing: 0.2px; }
 .media-controls > * + * { margin-left: 16px; }
 .icon-btn { width: 52px; height: 52px; border-radius: 50%; background: #2a2a2a; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
@@ -184,12 +201,27 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 .media-volume > * + * { margin-top: 12px; }
 /* Vertical slider via rotation: works in every browser (the old
    "-webkit-appearance: slider-vertical" trick is deprecated/removed). */
-.volume-slider-wrap { position: relative; width: 40px; height: 180px; }
+.volume-slider-wrap { position: relative; width: 56px; height: 240px; }
 .volume-slider {
-  position: absolute; top: 50%; left: 50%; width: 180px; height: 40px;
-  margin: -20px 0 0 -90px;
+  position: absolute; top: 50%; left: 50%; width: 240px; height: 56px;
+  margin: -28px 0 0 -120px;
   -webkit-transform: rotate(-90deg); transform: rotate(-90deg);
+  /* Big custom slider: thick track (filled part painted by app.js via background-size) and a large thumb */
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  background-color: transparent;
+  background-image: linear-gradient(#1e88e5, #1e88e5), linear-gradient(#444, #444);
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 50%, 0 50%;
+  background-size: 60% 14px, 100% 14px;
+  border-radius: 7px; cursor: pointer; outline: none;
 }
+.volume-slider::-webkit-slider-runnable-track { height: 14px; background: transparent; border: none; }
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 40px; height: 40px; margin-top: -13px;
+  border-radius: 50%; background: #fff; border: 4px solid #1e88e5; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.volume-slider::-moz-range-track { height: 14px; background: transparent; border: none; }
+.volume-slider::-moz-range-thumb { width: 32px; height: 32px; border-radius: 50%; background: #fff; border: 4px solid #1e88e5; }
 .mute-btn { background: #2a2a2a; border: none; color: #fff; padding: 8px 16px; min-height: 44px; min-width: 64px; border-radius: 8px; cursor: pointer; }
 .mute-btn.active { background: #c62828; }
 
@@ -244,6 +276,8 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 /* ===== Short screens (e.g. 1024x600 tablets): tighten spacing so cards aren't cut off ===== */
 @media (max-height: 650px) {
   #content { padding: 56px 20px 16px; }
+  /* full-width Home: keep the ☰ button clear of the clock card's top edge */
+  #menuToggle { top: 6px; left: 12px; }
   .card { padding: 16px; }
   .home-grid, .media-layout { grid-gap: 14px; gap: 14px; }
   #home-time { font-size: 44px; }
@@ -258,8 +292,6 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 @media (max-width: 600px) {
   #content { padding: 60px 12px 12px; }
   #home.page { overflow-y: auto; }
-  /* the hidden slide-out menu shouldn't reserve a blank 72px column on a narrow screen */
-  body.home-active #sidebar { position: fixed; top: 0; bottom: 0; left: 0; }
   .home-grid {
     height: auto;
     grid-template-columns: minmax(0, 1fr);
@@ -274,8 +306,8 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
   .media-shortcuts > * + * { margin-top: 0; margin-left: 12px; }
   .media-volume { flex-direction: row; justify-content: space-between; }
   .media-volume > * + * { margin-top: 0; margin-left: 12px; }
-  .volume-slider-wrap { width: auto; height: 44px; -webkit-flex: 1; flex: 1; }
-  .volume-slider { position: static; width: 100%; height: 44px; margin: 0; -webkit-transform: none; transform: none; }
+  .volume-slider-wrap { width: auto; height: 56px; -webkit-flex: 1; flex: 1; }
+  .volume-slider { position: static; width: 100%; height: 56px; margin: 0; -webkit-transform: none; transform: none; }
   .cal-day { min-height: 64px; padding: 4px; }
 }
 
