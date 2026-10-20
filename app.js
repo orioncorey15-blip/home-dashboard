@@ -146,6 +146,7 @@
 
     toggleClass(document.body, "home-active", pageId === "home");
     toggleClass($("sidebar"), "open", false); // any nav tap (incl. Home) closes the slide-out menu
+    closeDayModal();
 
     var fsBtn = $("fs-btn");
     if (fsBtn) fsBtn.style.display = (pageId === "photos" && FS_SUPPORTED) ? "block" : "none";
@@ -546,6 +547,7 @@
     for (var day = 1; day <= daysInMonth; day++) {
       var cell = document.createElement("div");
       cell.className = "cal-day" + (day === today ? " today" : "");
+      cell.setAttribute("data-day", day);
       var dateLabel = document.createElement("div");
       dateLabel.className = "cal-date";
       dateLabel.textContent = day;
@@ -560,6 +562,8 @@
       frag.appendChild(cell);
     }
 
+    calDayEvents = eventMap;
+    calMonthStart = monthStart;
     grid.innerHTML = "";
     grid.appendChild(frag);
   }
@@ -575,6 +579,70 @@
     var dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 23, 59, 59, 999);
     return e && e < dayEnd ? "Until " + fmtTime(new Date(e.getTime() + 1)) : "All day";
   }
+
+  /* Tap a calendar day to see all of its events (full titles + times). */
+  var calDayEvents = {};
+  var calMonthStart = new Date();
+  var dayModal = $("day-modal");
+  var dayModalTimer = null;
+
+  function eventTimeText(ev, dayDate) {
+    if (!ev.start || !ev.start.dateTime) return "All day";
+    var s = parseEventDate(ev), e = parseEventEnd(ev);
+    var dayEnd = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate() + 1);
+    var startTxt = s < dayDate ? "Earlier" : fmtTime(s);
+    var endTxt = !e ? "" : (e >= dayEnd ? "later" : fmtTime(new Date(e.getTime() + 1)));
+    return endTxt ? startTxt + " – " + endTxt : startTxt;
+  }
+
+  function openDayModal(day) {
+    if (!dayModal) return;
+    var date = new Date(calMonthStart.getFullYear(), calMonthStart.getMonth(), day);
+    setText("day-modal-title", date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
+    var list = $("day-modal-list");
+    list.innerHTML = "";
+    var evs = calDayEvents[day] || [];
+    if (!evs.length) {
+      var none = document.createElement("div");
+      none.className = "modal-empty";
+      none.textContent = "No events";
+      list.appendChild(none);
+    }
+    evs.forEach(function (ev) {
+      var row = document.createElement("div");
+      row.className = "modal-event" + (isHolidayEvent(ev) ? " holiday" : "");
+      var t = document.createElement("div");
+      t.className = "modal-event-time";
+      t.textContent = eventTimeText(ev, date);
+      var n = document.createElement("div");
+      n.className = "modal-event-title";
+      n.textContent = ev.summary || "Untitled";
+      row.appendChild(t);
+      row.appendChild(n);
+      list.appendChild(row);
+    });
+    toggleClass(dayModal, "open", true);
+    // A wall panel shouldn't stay stuck on a popup: close it after a minute.
+    clearTimeout(dayModalTimer);
+    dayModalTimer = setTimeout(closeDayModal, 60000);
+  }
+
+  function closeDayModal() {
+    clearTimeout(dayModalTimer);
+    toggleClass(dayModal, "open", false);
+  }
+
+  if ($("calendar-grid")) $("calendar-grid").addEventListener("click", function (e) {
+    var el = e.target;
+    while (el && el !== this && !(el.getAttribute && el.getAttribute("data-day"))) el = el.parentNode;
+    if (el && el !== this) openDayModal(Number(el.getAttribute("data-day")));
+  });
+  if ($("day-modal-close")) $("day-modal-close").addEventListener("click", closeDayModal);
+  // Tapping the dimmed area outside the panel closes it too.
+  if (dayModal) dayModal.addEventListener("click", function (e) { if (e.target === dayModal) closeDayModal(); });
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Escape" || e.keyCode === 27) && dayModal && dayModal.classList.contains("open")) closeDayModal();
+  });
 
   function renderToday(events) {
     var container = $("today-events");
