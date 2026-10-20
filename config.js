@@ -30,7 +30,10 @@ var CONFIG = {
   // Spotify: the Client ID of your Spotify developer app (not a secret).
   // Leave empty to keep the demo media controls. See README → "Spotify".
   SPOTIFY_CLIENT_ID: "",
-  // Optional: override the redirect URI (default: this site + /spotify-callback)
+  // Redirect URI: leave empty to use this site's address + /spotify-callback.
+  // On the production site that is https://homedashboard8080.netlify.app/spotify-callback,
+  // which must be the Redirect URI registered in the Spotify developer app.
+  // Only set this if the dashboard is opened from a different address (e.g. a custom domain).
   SPOTIFY_REDIRECT_URI: "",
 
   // YouTube favourites shown as quick buttons on the Media page.

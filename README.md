@@ -18,7 +18,8 @@ environment variables and the page only calls `/api/weather`, `/api/calendar` an
 - `manifest.json`, `icon-*.png`: home-screen icon.
 
 ## 1. Netlify setup (one time)
-In Netlify, open the site that deploys from `github.com/orioncorey15-blip/home-dashboard`
+In Netlify, open the site **`homedashboard8080`** (it deploys from `github.com/orioncorey15-blip/home-dashboard`;
+production address `https://homedashboard8080.netlify.app`, check it under *Site overview*)
 (*Site configuration → Build & deploy*: no build command, publish directory `.`; `netlify.toml` already says this).
 
 *Site configuration → Environment variables → Add a variable* (scope: Functions or All; same value for all deploy contexts):
@@ -34,7 +35,7 @@ In Netlify, open the site that deploys from `github.com/orioncorey15-blip/home-d
 | `GOOGLE_HOLIDAY_CALENDAR_ID` | optional, default US holidays |
 | `GOOGLE_DRIVE_FOLDER_ID` | the shared photo folder's ID (the part after `/folders/` in its link) |
 
-Then *Deploys → Trigger deploy* so the functions pick up the variables. Check `https://<your-site>.netlify.app/api/weather`
+Then *Deploys → Trigger deploy* so the functions pick up the variables. Check `https://homedashboard8080.netlify.app/api/weather`
 shows JSON.
 
 Key hygiene:
@@ -44,6 +45,14 @@ Key hygiene:
   No website restriction is needed (the key is used server-side).
 - The calendar must still be readable by the key (a public calendar). The functions only return what the dashboard
   shows: event titles and times, and photo IDs. Anyone who knows the site address can see those, same as the dashboard.
+- The functions are a **soft barrier, not a login**: they send no CORS headers (other websites' scripts can't read
+  the answers) and refuse requests whose `Origin`/`Referer` is another site. The site's own addresses come from
+  Netlify's `URL` / `DEPLOY_URL` / `DEPLOY_PRIME_URL` variables (plus localhost under `netlify dev`). A request with no
+  Origin/Referer (e.g. `curl`) is still answered, so treat what they return as public.
+- They only return what the dashboard uses: weather is trimmed (no coordinates, city name/ID), calendar items are
+  just title/start/end, photos just file IDs. `/api/calendar` takes whole days only
+  (`timeMin=YYYY-MM-DD&timeMax=YYYY-MM-DD`, at most 62 days, start within 400 days of today); other ranges are rounded
+  and redirected, so random ranges can't fill the cache or use up the Google quota.
 - Responses are cached on Netlify's CDN (weather 10-30 min, calendar 5 min, photos 15 min), which keeps the free
   quotas safe.
 
@@ -53,7 +62,7 @@ Key hygiene:
    - Android 5.x: install the APK *Fully Kiosk Browser 1.59.2* from the download box on https://www.fully-kiosk.com.
    - Android 4.4: the last working version is APK 1.44.1.
 3. In Fully (swipe in from the **left edge** → **Settings**):
-   - *Web Content Settings → Start URL*: `https://<your-site>.netlify.app/`
+   - *Web Content Settings → Start URL*: `https://homedashboard8080.netlify.app/`
    - *Web Content Settings → Open Other URL Schemes*: ON (free; lets the Bluetooth button open Bluetooth settings, see below).
    - *Web Content Settings → Autoplay Videos / Enable Fullscreen Videos*: ON (for YouTube).
    - *Device Management → Keep Screen On*: ON. *Launch on Boot*: ON. *Unlock Screen*: ON.
@@ -71,7 +80,7 @@ Shows the song playing on any of your Spotify devices, with album art and progre
 play/pause, next, previous and volume. Sign-in uses Spotify's PKCE flow, so there is **no secret** anywhere.
 
 1. Go to https://developer.spotify.com/dashboard, log in, *Create app*.
-   - Redirect URI: `https://<your-site>.netlify.app/spotify-callback` (exactly; https is required).
+   - Redirect URI: `https://homedashboard8080.netlify.app/spotify-callback` (exactly; https is required).
    - APIs used: *Web API*.
 2. Copy the app's **Client ID** into `config.js` → `SPOTIFY_CLIENT_ID` and commit/deploy.
    (The client ID is public by design. Don't copy the client secret anywhere; it isn't used.)
