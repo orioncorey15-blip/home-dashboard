@@ -8,7 +8,7 @@ export function env(name, fallback = "") {
   return v == null || v === "" ? fallback : String(v);
 }
 
-const SECRET_ENV = ["OWM_API_KEY", "GOOGLE_API_KEY", "GOOGLE_CALENDAR_ID", "GOOGLE_DRIVE_FOLDER_ID", "OWM_ZIP"];
+const SECRET_ENV = ["OWM_API_KEY", "GOOGLE_API_KEY", "GOOGLE_DRIVE_API_KEY", "GOOGLE_CALENDAR_ID", "GOOGLE_DRIVE_FOLDER_ID", "OWM_ZIP"];
 
 // Remove anything that looks like a key from text we pass back to the browser.
 function scrub(text) {
@@ -28,27 +28,73 @@ function scrub(text) {
 
 /**
  * JSON response with caching headers.
- * maxAge: seconds the browser may reuse it; Netlify's CDN also caches it
- * (per full URL incl. query) so many page loads cost only one upstream API call.
+ * maxAge: seconds the browser may reuse it; Netlify's CDN also caches it so many
+ * page loads cost only one upstream API call.
+ * vary: the query parameters that change the answer (all others are ignored in
+ * the CDN cache key, so junk parameters can't create new cache entries).
+ * No CORS headers: the dashboard calls these from the same site, so other
+ * websites' scripts can't read the responses.
  */
-export function json(body, { status = 200, maxAge = 0 } = {}) {
+export function json(body, { status = 200, maxAge = 0, vary = [] } = {}) {
   const headers = {
     "content-type": "application/json; charset=utf-8",
-    "access-control-allow-origin": "*",
     "x-content-type-options": "nosniff",
+    // same value on every response for a URL (Netlify requires it to be consistent)
+    // (an unused dummy name when nothing varies, so junk query strings share one entry)
+    "netlify-vary": "query=" + (vary.length ? vary.join("|") : "_"),
   };
   if (status === 200 && maxAge > 0) {
     headers["cache-control"] = `public, max-age=${maxAge}`;
     headers["netlify-cdn-cache-control"] = `public, s-maxage=${maxAge}, stale-while-revalidate=${maxAge * 6}`;
-    headers["netlify-vary"] = "query";
   } else {
     headers["cache-control"] = "no-store";
   }
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-export function fail(status, message) {
-  return json({ error: { message: scrub(message) } }, { status });
+/*
+ * Soft origin check. Browsers send Origin (cross-origin or non-GET) and/or Referer
+ * with requests; if either is present it must be this site: Netlify's URL,
+ * DEPLOY_URL or DEPLOY_PRIME_URL, the host the request came in on, or localhost
+ * (netlify dev). Requests with neither header (curl, some privacy settings) are
+ * allowed, so this only stops other websites from using the endpoints through
+ * visitors' browsers; it is NOT authentication. Responses carry no CORS headers,
+ * so other sites can't read them anyway.
+ */
+function originOf(value) {
+  try { return new URL(value).origin; } catch { return null; }
+}
+export function allowedOrigins(req) {
+  const set = new Set();
+  for (const name of ["URL", "DEPLOY_URL", "DEPLOY_PRIME_URL", "SITE_URL"]) {
+    const o = originOf(env(name));
+    if (o) set.add(o);
+  }
+  const self = originOf(req.url);
+  if (self) set.add(self);
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  if (host) { set.add("https://" + host); set.add("http://" + host); }
+  return set;
+}
+// localhost pages only count while running `netlify dev`
+function isLocal(origin) {
+  const dev = env("NETLIFY_DEV") === "true" || env("CONTEXT") === "dev";
+  return dev && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
+export function guard(req, vary = [], methods = ["GET", "HEAD"]) {
+  if (!methods.includes(req.method)) return fail(405, "Method not allowed", vary);
+  const ok = allowedOrigins(req);
+  for (const h of ["origin", "referer"]) {
+    const v = req.headers.get(h);
+    if (!v) continue;
+    const o = originOf(v);
+    if (!o || !(ok.has(o) || isLocal(o))) return fail(403, "Not allowed from this site", vary);
+  }
+  return null;
+}
+
+export function fail(status, message, vary = []) {
+  return json({ error: { message: scrub(message) } }, { status, vary });
 }
 
 /** Fetch JSON upstream with a timeout and a short in-memory cache. */
@@ -75,7 +121,7 @@ export async function upstreamJSON(url, ttlSeconds) {
   }
 }
 
-export function upstreamError(e) {
+export function upstreamError(e, vary = []) {
   const status = e && e.name === "AbortError" ? 504 : 502;
-  return fail(status, e && e.message ? e.message : "Upstream request failed");
+  return fail(status, e && e.message ? e.message : "Upstream request failed", vary);
 }

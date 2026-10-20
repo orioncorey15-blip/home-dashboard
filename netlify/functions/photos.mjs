@@ -1,9 +1,11 @@
 // GET /api/photos  ->  { files: [{id, mimeType}] }  (image files in the shared Drive folder)
 // Env: GOOGLE_DRIVE_FOLDER_ID, GOOGLE_API_KEY (or GOOGLE_DRIVE_API_KEY if you use a separate key)
 // The browser then shows each photo from https://lh3.googleusercontent.com/d/<id> (no key needed).
-import { env, json, fail, upstreamJSON, upstreamError } from "../lib/util.mjs";
+import { env, json, fail, guard, upstreamJSON, upstreamError } from "../lib/util.mjs";
 
-export default async () => {
+export default async (req) => {
+  const blocked = guard(req);
+  if (blocked) return blocked;
   const key = env("GOOGLE_DRIVE_API_KEY") || env("GOOGLE_API_KEY");
   const folder = env("GOOGLE_DRIVE_FOLDER_ID");
   if (!key || !folder) return fail(503, "Photos not configured (set GOOGLE_API_KEY and GOOGLE_DRIVE_FOLDER_ID)");
