@@ -473,8 +473,17 @@
 
   function isHolidayEvent(ev) { return ev._holiday || HOLIDAY_RE.test(ev.summary || ""); }
 
+  // The calendar function only accepts whole UTC days (YYYY-MM-DD, end exclusive),
+  // so every tablet asks for the same cacheable URL. Round the month out to whole days.
+  function utcDay(iso, roundUp) {
+    var t = new Date(iso).getTime();
+    var d = Math.floor(t / 86400000) * 86400000;
+    if (roundUp && d < t) d += 86400000;
+    var x = new Date(d);
+    return x.getUTCFullYear() + "-" + pad2(x.getUTCMonth() + 1) + "-" + pad2(x.getUTCDate());
+  }
   function calUrl(which, start, end) {
-    return apiUrl("calendar?which=" + which + "&timeMin=" + encodeURIComponent(start) + "&timeMax=" + encodeURIComponent(end));
+    return apiUrl("calendar?which=" + which + "&timeMin=" + utcDay(start, false) + "&timeMax=" + utcDay(end, true));
   }
 
   var calendarTask = makeTask("Calendar", function (done) {
