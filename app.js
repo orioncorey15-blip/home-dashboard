@@ -590,7 +590,7 @@
 
     container.innerHTML = "";
     if (!todays.length) {
-      container.innerHTML = '<div style="opacity:0.6">' + (calLoaded || !CFG.CAL_API_KEY ? "No events today" : "Loading…") + "</div>";
+      container.innerHTML = '<div style="opacity:0.6">' + (!CFG.CAL_API_KEY || !CFG.CAL_ID ? "Calendar not configured" : (calLoaded ? "No events today" : "Loading…")) + "</div>";
       return;
     }
 
