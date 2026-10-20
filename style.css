@@ -190,7 +190,7 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
   margin: -20px 0 0 -90px;
   -webkit-transform: rotate(-90deg); transform: rotate(-90deg);
 }
-.mute-btn { background: #2a2a2a; border: none; color: #fff; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+.mute-btn { background: #2a2a2a; border: none; color: #fff; padding: 8px 16px; min-height: 44px; min-width: 64px; border-radius: 8px; cursor: pointer; }
 .mute-btn.active { background: #c62828; }
 
 /* Calendar */
