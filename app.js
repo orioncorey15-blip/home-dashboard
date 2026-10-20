@@ -305,6 +305,7 @@
     if ($("night-label")) setText("night-label", on ? "Night on" : "Night");
     else if (nightBtn) nightBtn.textContent = on ? "Night On" : "Night Mode";
     toggleClass(nightBtn, "on", on);
+    if (typeof radar !== "undefined" && radar) radar.schedule(); // stop/restart the radar loop
     store.set("nightMode", on);
     if (NIGHT_SCHEDULED) store.set("nightModePeriod", nightPeriodKey(new Date()));
   }
@@ -758,10 +759,13 @@
       paintTicks();
     }
 
+    // Night mode dims the screen and pauses the CSS animations; the radar loop stops too.
+    function nightOn() { return /(^|\s)night(\s|$)/.test(document.body.className); }
+
     function tick() {
       clearTimeout(timer);
       timer = null;
-      if (!frames.length || !playing || isHidden() || !visibleMaps().length) return;
+      if (!frames.length || !playing || isHidden() || nightOn() || !visibleMaps().length) return;
       show(idx + 1);
       // linger on the newest frame so "now" is easy to read
       timer = setTimeout(tick, idx === frames.length - 1 ? 2200 : 550);
@@ -769,6 +773,7 @@
     function schedule() {
       clearTimeout(timer);
       timer = null;
+      if (nightOn()) { if (frames.length && idx !== frames.length - 1) show(frames.length - 1); return; } // hold on "now"
       if (playing && !isHidden() && visibleMaps().length) timer = setTimeout(tick, 1200);
     }
 
