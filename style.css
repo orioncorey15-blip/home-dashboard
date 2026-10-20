@@ -227,6 +227,7 @@ body.home-active #sidebar.open { -webkit-transform: translateX(0); transform: tr
 .mute-btn.active { background: #c62828; }
 
 /* Calendar */
+.cal-title { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

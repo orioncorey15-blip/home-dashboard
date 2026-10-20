@@ -507,6 +507,7 @@
     var daysInMonth = new Date(year, month + 1, 0).getDate();
     var monthStart = new Date(year, month, 1);
     var monthEnd = new Date(year, month, daysInMonth, 23, 59, 59, 999);
+    setText("cal-title", monthStart.toLocaleDateString([], { month: "long", year: "numeric" }));
 
     // Map each event onto every day it covers within this month
     // (multi-day events show on each day; events from other months don't leak in).
