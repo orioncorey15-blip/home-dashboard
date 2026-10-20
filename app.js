@@ -607,6 +607,15 @@
     var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
     var OPACITY = 0.78;
     var HAS_L = typeof window.L !== "undefined" && !!window.L.map;
+    // Old/low-memory tablets: show only the newest radar frame (1 tile layer per map instead of 12)
+    // and don't animate. CONFIG.RADAR_ANIMATE: true = always animate, false = never, unset = auto.
+    var LITE = CFG.RADAR_ANIMATE === false || (CFG.RADAR_ANIMATE !== true && lowEndDevice());
+    function lowEndDevice() {
+      var mem = navigator.deviceMemory;
+      if (num(mem) && mem <= 2) return true;
+      var s = window.screen || {}, px = Math.max(s.width || 0, s.height || 0) * (window.devicePixelRatio || 1);
+      return px > 0 && px <= 1024; // e.g. the old 1024x600 tablet
+    }
 
     var provider = "iem";
     var frames = [];       // [{ url, time (ms or 0), mins (minutes ago) }]
@@ -617,7 +626,7 @@
     function iemFrames() {
       var bucket = Math.floor(Date.now() / 300000); // new tile URLs every 5 minutes
       var out = [];
-      for (var m = 55; m >= 0; m -= 5) {
+      for (var m = LITE ? 0 : 55; m >= 0; m -= 5) {
         out.push({ url: IEM + (m ? "-m" + pad2(m) + "m" : "") + "/{z}/{x}/{y}.png?v=" + bucket, mins: m, time: validMs ? validMs - m * 60000 : 0 });
       }
       return out;
@@ -691,7 +700,7 @@
         }
         provider = "rainviewer";
         frames = [];
-        each(past.slice(-12), function (p) {
+        each(past.slice(LITE ? -1 : -12), function (p) {
           if (!p || !/^\/[A-Za-z0-9\/_-]+$/.test(String(p.path || ""))) return;
           frames.push({ url: data.host + p.path + "/256/{z}/{x}/{y}/2/1_1.png", time: (p.time || 0) * 1000, mins: 0 });
         });
@@ -765,7 +774,7 @@
     function tick() {
       clearTimeout(timer);
       timer = null;
-      if (!frames.length || !playing || isHidden() || nightOn() || !visibleMaps().length) return;
+      if (frames.length < 2 || !playing || isHidden() || nightOn() || !visibleMaps().length) return;
       show(idx + 1);
       // linger on the newest frame so "now" is easy to read
       timer = setTimeout(tick, idx === frames.length - 1 ? 2200 : 550);
@@ -854,7 +863,7 @@
     return {
       init: init, onPageChange: onPageChange, schedule: schedule,
       state: function () {
-        var s = { provider: provider, frames: frames.length, idx: idx, playing: playing, maps: {} };
+        var s = { provider: provider, lite: LITE, frames: frames.length, idx: idx, playing: playing, maps: {} };
         for (var k in maps) if (maps.hasOwnProperty(k)) s.maps[k] = { loaded: maps[k].loaded, errors: maps[k].errors, layers: maps[k].layers.length };
         return s;
       }

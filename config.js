@@ -50,6 +50,9 @@ var CONFIG = {
   RADAR_LAT: 41.86,
   RADAR_LON: -80.79,
   RADAR_ZOOM: 7,
+  // Radar animation: leave unset for automatic (old/low-memory tablets show just the newest
+  // frame), or set true / false to always / never animate.
+  // RADAR_ANIMATE: true,
 
   // Bluetooth button: set to true after turning on Fully Kiosk →
   // Settings → Web Content Settings → "Open Other URL Schemes" (free).
