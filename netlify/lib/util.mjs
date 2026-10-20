@@ -8,9 +8,18 @@ export function env(name, fallback = "") {
   return v == null || v === "" ? fallback : String(v);
 }
 
+const SECRET_ENV = ["OWM_API_KEY", "GOOGLE_API_KEY", "GOOGLE_CALENDAR_ID", "GOOGLE_DRIVE_FOLDER_ID", "OWM_ZIP"];
+
 // Remove anything that looks like a key from text we pass back to the browser.
 function scrub(text) {
-  return String(text || "")
+  let out = String(text || "");
+  // Exact configured values first (keys of any shape, private calendar/folder ids).
+  for (const name of SECRET_ENV) {
+    const v = env(name);
+    if (v.length < 4) continue;
+    for (const form of [v, encodeURIComponent(v)]) out = out.split(form).join("[" + name.toLowerCase() + "]");
+  }
+  return out
     .replace(/AIza[0-9A-Za-z_-]{35}/g, "[key]")
     .replace(/\b[0-9a-f]{32}\b/g, "[key]")
     .replace(/(key|appid)=[^&\s"]+/gi, "$1=[key]")
