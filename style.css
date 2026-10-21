@@ -197,6 +197,9 @@ body[data-wx="fog"] .wx-wash { background: -webkit-linear-gradient(295deg, #3e47
 
 .home-weather { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; min-height: 0; padding: 18px 20px 10px; }
 .home-weather-top { -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 0; margin-top: auto; }
+/* the spare height is shared evenly between the sections (no big empty band above and below) */
+.home-weather-top + .mini-stats { margin-top: auto; }
+.home-weather-top { margin-bottom: 16px; }
 .wx-icon { line-height: 0; }
 .wx-icon svg { width: 100%; height: 100%; overflow: visible; }
 .home-wx-icon { width: 104px; height: 104px; -webkit-flex-shrink: 0; flex-shrink: 0; margin: -10px 8px -10px -10px; -webkit-filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.25)); filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.25)); }
@@ -338,6 +341,20 @@ body.playing .eq i:nth-child(4) { -webkit-animation-delay: 0.1s; animation-delay
 .cat-health .ev-action { color: #ff8b98; } .cat-social .ev-action { color: #f7c271; } .cat-home .ev-action { color: #52dbd3; }
 .cat-errands .ev-action { color: #7ddc8a; } .cat-travel .ev-action { color: #ffae7d; } .cat-celebrate .ev-action { color: #ff9ad8; }
 
+/* Landscape tablet (Tab A8 ~1340x838, 1280x800): the weather card is tall, so its content is sized up
+   to fill it instead of floating in empty space (the tint stays). */
+@media (min-width: 1100px) and (min-height: 760px) {
+  .home-wx-icon { width: 132px; height: 132px; margin: -12px 10px -12px -12px; }
+  .home-temp { font-size: 84px; }
+  .home-desc { font-size: 17px; margin-top: 6px; }
+  .home-feels { font-size: 14px; margin-top: 4px; }
+  .mini-stats { margin-top: 22px; padding-top: 14px; }
+  .mini-stat { padding: 14px 6px; }
+  .mini-stat svg { width: 24px; height: 24px; margin-right: 12px; }
+  .ms-label { font-size: 12px; }
+  .ms-value { font-size: 17px; margin-top: 1px; }
+}
+
 /* =====================  WEATHER PAGE  ===================== */
 /* Flat layout (no big card): header row, current conditions + stat strip + hourly + 6-day on the
    left, the radar as its own titled card on the right. */
@@ -353,12 +370,15 @@ body.playing .eq i:nth-child(4) { -webkit-animation-delay: 0.1s; animation-delay
   grid-gap: 14px 20px; gap: 14px 20px;
   grid-template-areas: "top top" "main radar";
 }
-.wx-top { grid-area: top; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding-right: 160px; min-height: 44px; }
+/* the header row uses the page's own columns: location on the left, Refresh at the right edge of the
+   weather column (same row), the clock above the radar column */
+.wx-top { grid-area: top; display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr); grid-gap: 0 20px; gap: 0 20px; -webkit-align-items: center; align-items: center; min-height: 44px; }
+.wx-top > * { grid-row: 1; grid-column: 1; }
 .wx-place { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-width: 0; }
 .wx-pin { width: 22px; height: 22px; -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 10px; color: #8fb8ff; }
 .wx-place-name { font-size: 18px; font-weight: 600; white-space: nowrap; }
 .wx-updated { font-size: 12px; color: rgba(228, 234, 250, 0.64); margin-top: 1px; }
-#weather-refresh { position: absolute; top: 0; right: 0; z-index: 2; height: 38px; padding: 0 14px; font-size: 13px; }
+#weather-refresh { justify-self: end; -webkit-align-self: center; align-self: center; height: 38px; padding: 0 14px; font-size: 13px; }
 
 .weather-main { grid-area: main; position: relative; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; min-height: 0; min-width: 0; }
 .wx-now { -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; padding-bottom: 16px; }
@@ -859,6 +879,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
   .home-bottom { grid-template-columns: minmax(0, 1fr); }
 
   .weather-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(340px, 1fr); grid-template-areas: "top" "main" "radar"; }
+  .wx-top { grid-template-columns: minmax(0, 1fr); padding-right: 160px; }
   .wx-section { -webkit-flex: none; flex: none; }
   .hourly-row, .daily-row { -webkit-flex: none; flex: none; }
 
@@ -909,12 +930,12 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
   .home-bottom { margin-top: 12px; }
   .card-title { margin-bottom: 8px; font-size: 11px; }
   .home-weather { padding: 12px 14px; }
-  .home-wx-icon { width: 60px; height: 60px; margin-right: 8px; }
-  .home-temp { font-size: 42px; }
+  .home-wx-icon { width: 80px; height: 80px; margin-right: 8px; }
+  .home-temp { font-size: 52px; }
   .home-desc { font-size: 13px; }
   .home-feels { font-size: 12px; }
   .mini-stats { margin-top: 8px; padding-top: 6px; }
-  .mini-stat { padding: 3px 6px; }
+  .mini-stat { padding: 6px 6px; }
   .mini-stat svg { width: 18px; height: 18px; margin-right: 8px; }
   .ms-label { font-size: 10px; }
   .ms-value { font-size: 13px; }
@@ -947,11 +968,11 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
   body[data-page="calendar"] #content, body[data-page="weather"] #content { padding-top: 10px; }
   .weather-layout { grid-gap: 8px 14px; gap: 8px 14px; }
   .wx-glow { top: -10px; left: -18px; }
-  .wx-top { min-height: 40px; padding-right: 130px; }
+  .wx-top { min-height: 40px; grid-gap: 0 14px; gap: 0 14px; }
   .wx-place-name { font-size: 15px; }
   .wx-updated { font-size: 11px; }
   .wx-pin { width: 18px; height: 18px; margin-right: 8px; }
-  #weather-refresh { height: 34px; padding: 0 12px; font-size: 12px; margin-left: 14px; }
+  #weather-refresh { height: 34px; padding: 0 12px; font-size: 12px; }
   .wx-now { padding-bottom: 8px; }
   #weather-temp { font-size: 64px; }
   .weather-icon { width: 70px; height: 70px; margin: -8px 0 -8px 12px; }
@@ -1046,7 +1067,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
   .home-bottom { grid-template-columns: minmax(0, 1fr); }
   .np-progress { display: none !important; }
   .weather-layout { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 380px; grid-template-areas: "top" "main" "radar"; }
-  .wx-top { padding-right: 0; }
+  .wx-top { grid-template-columns: minmax(0, 1fr); padding-right: 0; }
   #weather.page { overflow-y: auto; }
   .wx-stats { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
   .wx-stat { width: -webkit-calc(50% - 10px); width: calc(50% - 10px); -webkit-flex: none; flex: none; margin-bottom: 8px; }
@@ -1287,3 +1308,4 @@ body.sp-full .sp-connected .sp-full-close svg { width: 26px; height: 26px; }
   .sp-connected .sp-modes, .sp-connected .sp-watch-btn { display: none; }
   body.sp-full .sp-connected .sp-modes { display: -webkit-flex; display: flex; }
 }
+.sp-message.sticky { cursor: pointer; }

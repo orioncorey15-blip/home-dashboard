@@ -2155,9 +2155,13 @@
     }
     function connected() { return CAN_USE && !!store.get("sp_refresh"); }
 
-    function setMessage(text) {
+    // sticky: stays through polls until the user does something about it (e.g. "No active device")
+    var stickyMsg = false;
+    function setMessage(text, sticky) {
       message = text || "";
+      stickyMsg = !!(message && sticky);
       setText("sp-message", message);
+      toggleClass($("sp-message"), "sticky", stickyMsg);
     }
 
     function saveTokens(t) {
@@ -2284,7 +2288,7 @@
         if (!err) {
           state = (status === 204 || !data) ? null : data;
           stateAt = Date.now();
-          if (message && !/Premium/.test(message)) setMessage("");
+          if (message && !stickyMsg && !/Premium/.test(message)) setMessage("");
           render();
           schedulePoll();
           return;
@@ -2310,10 +2314,13 @@
       if (!err.status) return "Can't reach Spotify right now.";
       return "Spotify: " + err.message;
     }
+    function isNoDevice(err) { return !!err && (err.status === 404 || /NO_ACTIVE_DEVICE/.test(err.message + " " + err.reason)); }
     function onCommandError(err) {
       if (!err) { setMessage(""); return; }
-      setMessage(errorText(err));
-      if ((err.status === 404 || /NO_ACTIVE_DEVICE/.test(err.message + " " + err.reason)) && spBrowse) spBrowse.noDevice();
+      // "No active device" stays up until a command works, a device is picked, or the message is tapped
+      var nd = isNoDevice(err);
+      setMessage(errorText(err), nd);
+      if (nd && spBrowse) spBrowse.noDevice();
     }
 
     function command(which) {
@@ -2525,6 +2532,7 @@
         var m = $("sp-menu");
         if (m && m.style.display !== "none" && !m.contains(e.target)) showMenu(false);
       });
+      if ($("sp-message")) $("sp-message").addEventListener("click", function () { setMessage(""); });
       if ($("shuffle-btn")) $("shuffle-btn").addEventListener("click", function () { setShuffle(!(state && state.shuffle_state)); });
       // full-screen player: tap the progress bar to jump there (the mini player's bar is only a thin line)
       if ($("sp-progress-wrap")) $("sp-progress-wrap").addEventListener("click", function (e) {
@@ -3000,7 +3008,7 @@
         api("GET", "/me/player/devices", undefined, function (err, d) {
           if (err) { spotify.onCommandError(err); return; }
           var dev = pickDevice(d && d.devices);
-          if (!dev) { noDevice(); return; }
+          if (!dev) { spotify.setMessage("No active Spotify device. Open Spotify on the tablet, or pick a device.", true); noDevice(); return; }
           send(dev.id);
         });
       }
