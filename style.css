@@ -1222,6 +1222,8 @@ body.sp-full .sp-connected .now-playing .eyebrow { display: block; }
 body.sp-full .sp-connected #play-status { font-size: 40px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 body.sp-full .sp-connected #track-info { font-size: 18px; margin-top: 8px; }
 body.sp-full .sp-connected .sp-progress-wrap { position: static; width: 100%; max-width: none; }
+/* full screen: the bar is tappable to seek, with a 44 px tall touch area */
+body.sp-full .sp-connected .sp-progress-wrap { cursor: pointer; padding-top: 17px; margin-top: -3px; } /* also ~14 px below the artist line */
 body.sp-full .sp-connected .sp-progress { height: 6px; }
 body.sp-full .sp-connected .sp-times { display: -webkit-flex; display: flex; }
 body.sp-full .sp-connected .media-controls { margin-left: 0; }

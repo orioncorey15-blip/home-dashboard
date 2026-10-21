@@ -2526,6 +2526,16 @@
         if (m && m.style.display !== "none" && !m.contains(e.target)) showMenu(false);
       });
       if ($("shuffle-btn")) $("shuffle-btn").addEventListener("click", function () { setShuffle(!(state && state.shuffle_state)); });
+      // full-screen player: tap the progress bar to jump there (the mini player's bar is only a thin line)
+      if ($("sp-progress-wrap")) $("sp-progress-wrap").addEventListener("click", function (e) {
+        var item = state && state.item, bar = this.querySelector(".sp-progress");
+        if (!connected() || !document.body.classList.contains("sp-full") || !item || !item.duration_ms || !bar) return;
+        var r = bar.getBoundingClientRect();
+        if (!r.width) return;
+        var pos = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * item.duration_ms);
+        state.progress_ms = pos; stateAt = Date.now(); renderProgress();
+        api("PUT", "/me/player/seek?position_ms=" + pos, undefined, function (err) { onCommandError(err); schedulePoll(800); });
+      });
       if ($("sp-full-btn")) $("sp-full-btn").addEventListener("click", function () { setFull(!document.body.classList.contains("sp-full")); });
       if ($("sp-full-close")) $("sp-full-close").addEventListener("click", function () { setFull(false); });
       if ($("sp-player")) $("sp-player").addEventListener("click", function (e) {
