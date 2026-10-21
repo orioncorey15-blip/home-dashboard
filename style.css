@@ -1426,5 +1426,5 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
 
 /* Narrow portrait: the not-connected (demo) Spotify panel's cover was 60 px too tall for the card */
 @media (orientation: portrait) and (max-width: 700px) {
-  .album-art { width: 62%; }
+  .album-art { width: 50%; }
 }
