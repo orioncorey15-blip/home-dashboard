@@ -45,6 +45,15 @@ var CONFIG = {
   // Leave empty to pick the tablet's own Spotify app automatically.
   SPOTIFY_DEVICE_NAME: "",
 
+  // Local Music: the Navidrome (Subsonic API) server. Only addresses live here; you sign in on the tablet
+  // (Media > Local Music), which keeps just a sign-in token, never the password.
+  // Tried in order; the first that answers is used for the session:
+  //  1. Tailscale (https, real certificate; the tablet must run the Tailscale app)
+  //  2. the home Wi-Fi address (http: needs Fully Kiosk's Mixed Content Mode, see README)
+  NAVIDROME_URLS: ["https://corey.tail3ebea9.ts.net", "http://192.168.254.70:4533"],
+  // Highest bitrate (kbps) the server sends; it converts bigger files to mp3 at this rate for the old tablet.
+  NAVIDROME_MAX_BITRATE: 192,
+
   // YouTube favourites shown as quick buttons on the Media page.
   // id = the video ID (the part after "v=" in a YouTube link) or a full link.
   YOUTUBE_FAVORITES: [

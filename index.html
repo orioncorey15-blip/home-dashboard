@@ -448,6 +448,96 @@
               </div>
               <div class="yt-msg" id="yt-msg"></div>
             </div>
+
+            <!-- LOCAL MUSIC (Navidrome / Subsonic; see localmusic.js) -->
+            <div class="media-panel lm-panel" id="local-panel" style="display:none">
+              <!-- sign-in (only a token is saved, never the password) -->
+              <div class="lm-setup" id="lm-setup">
+                <form class="lm-setup-card" id="lm-form" action="#" autocomplete="off" onsubmit="return false">
+                  <div class="lm-setup-title">Local Music</div>
+                  <div class="lm-setup-sub">Sign in to the Navidrome music server (home Wi-Fi, or anywhere with Tailscale on).</div>
+                  <label class="lm-field"><span>Server</span><input type="url" id="lm-url" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url"></label>
+                  <label class="lm-field"><span>Username</span><input type="text" id="lm-user" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+                  <label class="lm-field"><span>Password</span><input type="password" id="lm-pass" autocomplete="off"></label>
+                  <button type="submit" class="lm-signin" id="lm-signin">Sign in</button>
+                  <div class="lm-setup-msg" id="lm-setup-msg" role="status"></div>
+                  <div class="lm-setup-note">Only a sign-in token is saved on this tablet, never the password.</div>
+                </form>
+              </div>
+              <div class="sp-browse" id="lm-browse" style="display:none">
+                <div class="spb-bar">
+                  <div class="spb-tabs" id="lm-tabs" role="tablist">
+                    <button class="spb-tab active" data-tab="albums" role="tab">Albums</button>
+                    <button class="spb-tab" data-tab="artists" role="tab">Artists</button>
+                    <button class="spb-tab" data-tab="playlists" role="tab">Playlists</button>
+                  </div>
+                  <form class="spb-search" id="lm-search-form" action="#" onsubmit="return false">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+                    <input type="search" id="lm-search" placeholder="Search your music" aria-label="Search your music" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" enterkeyhint="search">
+                  </form>
+                  <button class="spb-tool" id="lm-queue-btn" aria-label="Up next">
+                    <svg viewBox="0 0 24 24"><path d="M4 6.5h11M4 11.5h11M4 16.5h7"/><path d="M16 15v5.5l4.5-2.75z" class="fill"/></svg>
+                  </button>
+                  <button class="spb-tool" id="lm-account-btn" aria-label="Local Music account">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c.8-3.3 3.6-5.5 7-5.5s6.2 2.2 7 5.5"/></svg>
+                  </button>
+                </div>
+                <div class="spb-head" id="lm-head" style="display:none"></div>
+                <div class="spb-body" id="lm-body"></div>
+                <div class="spb-sheet" id="lm-sheet" style="display:none">
+                  <div class="spb-sheet-head">
+                    <div class="spb-sheet-title" id="lm-sheet-title">Up next</div>
+                    <button class="spb-tool" id="lm-sheet-close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+                  </div>
+                  <div class="spb-sheet-body" id="lm-sheet-body"></div>
+                </div>
+              </div>
+              <div class="sp-player" id="lm-player" style="display:none">
+                <button class="sp-full-close" id="lm-full-close" aria-label="Close full screen"><svg viewBox="0 0 24 24"><path d="M6 9.5 12 15.5 18 9.5"/></svg></button>
+                <div class="album-art"><img id="lm-art" alt=""><span class="album-art-label">
+                  <svg viewBox="0 0 24 24"><path d="M9 17.5V5.5l11-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg></span></div>
+                <div class="sp-side">
+                  <div class="now-playing">
+                    <div class="eyebrow">Local Music</div>
+                    <strong id="lm-title">Not Playing</strong>
+                    <span id="lm-sub">Pick something above to play</span>
+                  </div>
+                  <div class="sp-progress-wrap" id="lm-progress-wrap">
+                    <div class="sp-progress"><div class="sp-progress-bar" id="lm-progress-bar"></div></div>
+                    <div class="sp-times"><span id="lm-pos">0:00</span><span id="lm-dur">0:00</span></div>
+                  </div>
+                  <div class="media-controls">
+                    <button class="icon-btn" id="lm-prev" aria-label="Previous">
+                      <svg viewBox="0 0 24 24"><path d="M17.5 6v12L9 12z"/><rect x="6" y="6" width="2.4" height="12" rx="1"/></svg>
+                    </button>
+                    <button class="icon-btn play" id="lm-play" aria-label="Play / Pause">
+                      <svg viewBox="0 0 24 24" class="play-icon"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+                      <svg viewBox="0 0 24 24" class="pause-icon"><rect x="7" y="5.5" width="3.6" height="13" rx="1"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1"/></svg>
+                    </button>
+                    <button class="icon-btn" id="lm-next" aria-label="Next">
+                      <svg viewBox="0 0 24 24"><path d="M6.5 6v12L15 12z"/><rect x="15.6" y="6" width="2.4" height="12" rx="1"/></svg>
+                    </button>
+                  </div>
+                  <div class="sp-modes">
+                    <button class="repeat-btn shuffle-btn" id="lm-shuffle" aria-label="Shuffle: off" aria-pressed="false">
+                      <svg viewBox="0 0 24 24"><path d="M3.5 7h3.2c1.6 0 3 .8 3.9 2.1l3.8 5.8c.9 1.3 2.3 2.1 3.9 2.1h2.2M3.5 17h3.2c1.6 0 3-.8 3.9-2.1M14.4 9.1c.9-1.3 2.3-2.1 3.9-2.1h2.2M18 4.5 20.5 7 18 9.5M18 14.5l2.5 2.5-2.5 2.5"/></svg>
+                      <span>Shuffle</span>
+                    </button>
+                    <button class="repeat-btn" id="lm-repeat" aria-label="Repeat: off">
+                      <svg viewBox="0 0 24 24"><path d="M4.5 11V9.5a3 3 0 0 1 3-3h11M15.5 3.5l3 3-3 3M19.5 13v1.5a3 3 0 0 1-3 3h-11M8.5 20.5l-3-3 3-3"/></svg>
+                      <span>Repeat</span><span class="repeat-state" id="lm-repeat-state">Off</span>
+                    </button>
+                  </div>
+                  <div class="sp-full-vol" id="lm-full-vol-wrap">
+                    <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/></svg>
+                    <input type="range" min="0" max="100" value="60" id="lm-full-vol" aria-label="Volume">
+                    <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+                  </div>
+                  <div class="sp-message" id="lm-message"></div>
+                </div>
+                <button class="sp-full-btn" id="lm-full-btn" aria-label="Full screen player"><svg viewBox="0 0 24 24"><path d="M4 9V5.5C4 4.7 4.7 4 5.5 4H9M15 4h3.5c.8 0 1.5.7 1.5 1.5V9M20 15v3.5c0 .8-.7 1.5-1.5 1.5H15M9 20H5.5C4.7 20 4 19.3 4 18.5V15"/></svg></button>
+              </div>
+            </div>
           </div>
 
           <div class="card media-volume">
@@ -480,6 +570,10 @@
               <button class="shortcut-btn" data-source="youtube" title="YouTube">
                 <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" class="fill"/></svg>
                 <span>YouTube</span>
+              </button>
+              <button class="shortcut-btn" data-source="local" title="Local Music">
+                <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="1.1" class="fill"/></svg>
+                <span>Local Music</span>
               </button>
               <button class="shortcut-btn" data-source="bluetooth" title="Bluetooth">
                 <svg viewBox="0 0 24 24"><path d="m7 7.5 10 9L12 21V3l5 4.5-10 9"/></svg>
@@ -536,6 +630,7 @@
   <script src="config.js"></script>
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="weather-icons.js"></script>
+  <script src="localmusic.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

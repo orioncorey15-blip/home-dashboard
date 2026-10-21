@@ -159,6 +159,22 @@ The "Source" bar at the bottom of Media switches between Spotify, YouTube (opens
 Bluetooth (the button above); it also shows the Spotify device name when Spotify is connected. *Repeat* cycles
 Off / All / One (Spotify Premium).
 
+## 6. Local Music (Navidrome)
+Media → **Local Music** plays the home Navidrome library (Subsonic API) in the tablet's own `<audio>` player.
+- Servers are listed in `config.js` → `NAVIDROME_URLS`, tried in order with `ping.view` (4 s each); the first that
+  answers is used for the session. Default: `https://corey.tail3ebea9.ts.net` (Tailscale Serve), then
+  `http://192.168.254.70:4533` (home Wi-Fi). The server field in the sign-in form can be edited.
+- **No credentials are in the repo.** Sign in on the tablet with your Navidrome username and password. Only the
+  username and a Subsonic token (`md5(password + random salt)`) are kept in localStorage, never the password.
+  *Sign out* (the person icon) forgets them.
+- **Tailscale (recommended):** install the Tailscale app on the tablet, sign in, and keep it connected. The https
+  address then works at home and away.
+- **LAN address (`http://…:4533`):** the dashboard is https, so Fully Kiosk must allow mixed content:
+  *Settings → Advanced Web Settings → Mixed Content Mode → Always Allow Mixed Content* (Fully 1.43+). Fully's docs
+  warn that Android WebView 111+ may still block some mixed content (local IPs especially), so prefer Tailscale.
+- Streams use `format=mp3&maxBitRate=NAVIDROME_MAX_BITRATE` (192), falling back to the original file. Plays are
+  scrobbled to Navidrome (now playing at the start, played after half the song).
+
 ## Photos
 `PHOTO_SOURCE` in `config.js`:
 - **`"drive"` (default):** a Google Drive folder shared as *Anyone with the link → Viewer* (ID in `GOOGLE_DRIVE_FOLDER_ID`).

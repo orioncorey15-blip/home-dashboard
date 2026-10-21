@@ -225,7 +225,7 @@
       var a = document.activeElement, tag = a && a.tagName ? String(a.tagName).toUpperCase() : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable)) return true;
       var cls = " " + body.className + " ";
-      if (/ (sp-full|radar-full|yt-max-open) /.test(cls)) return true;
+      if (/ (sp-full|lm-full|radar-full|yt-max-open) /.test(cls)) return true;
       if (document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement || document.mozFullScreenElement) return true;
       var open = document.querySelectorAll(".modal.open, .spb-sheet, .bt-help, [role=\"dialog\"]");
       for (var i = 0; i < open.length; i++) if (shown(open[i])) return true;
@@ -1931,7 +1931,11 @@
 
   /* ===== MEDIA: shared state, volume, source buttons ===== */
   var isPlaying = false;          // demo player state (used only when Spotify isn't connected)
-  var activeSource = "spotify";   // "spotify" or "youtube" (which panel shows)
+  var activeSource = "spotify";   // "spotify", "youtube" or "local" (which panel shows)
+  var localMusic = null;          // Local Music (Navidrome), created by localmusic.js; null if that file is missing
+  // Local Music owns the shared controls (Home bar, volume) while it has a song and is playing or on screen
+  function localOwns() { return !!(localMusic && localMusic.hasTrack() && (localMusic.isPlaying() || activeSource === "local")); }
+  function pauseLocal() { if (localMusic) localMusic.pause(); }
   var volumeLevel = 60;
   var isMuted = false;
   var connectedOutput = "Bluetooth Speaker";
@@ -1948,9 +1952,10 @@
     if (!volumeSlider) return;
     var v = Math.max(0, Math.min(100, Number(volumeSlider.value) || 0));
     volumeSlider.style.backgroundSize = v + "% 14px, 100% 14px";
-    var fv = $("sp-full-vol"); // the full-screen Spotify player's slider mirrors this one
-    if (fv && document.activeElement !== fv) fv.value = v;
-    if (fv) fv.style.backgroundSize = v + "% 8px, 100% 8px";
+    each([$("sp-full-vol"), $("lm-full-vol")], function (fv) { // the full-screen players' sliders mirror this one
+      if (fv && document.activeElement !== fv) fv.value = v;
+      if (fv) fv.style.backgroundSize = v + "% 8px, 100% 8px";
+    });
   }
 
   function fmtDuration(ms) {
@@ -1961,7 +1966,10 @@
   // One place decides what the Media page and the Home "now playing" card say.
   function updateNowPlaying() {
     var home = "Not Playing";
-    if (youtube.isPlaying()) {
+    var li = localOwns() ? localMusic.info() : null;
+    if (li) {
+      home = (li.playing ? "" : "Paused · ") + li.title + (li.artist ? " — " + li.artist : "");
+    } else if (youtube.isPlaying()) {
       home = "YouTube · " + (youtube.title() || "Playing");
     } else if (spotify.connected()) {
       home = spotify.homeText();
@@ -1987,8 +1995,12 @@
    */
   function renderHomePlayer() {
     var info = spotify.connected() ? spotify.info() : null;
-    var title = "Not Playing", sub = "Tap to choose Spotify or YouTube", art = "", playing = isPlaying, pos = 0, dur = 0;
-    if (youtube.isPlaying()) {
+    var title = "Not Playing", sub = "Tap to choose Spotify, YouTube or Local Music", art = "", playing = isPlaying, pos = 0, dur = 0;
+    var li = localOwns() ? localMusic.info() : null;
+    if (li) {
+      title = li.title; sub = [li.artist, "Local Music"].filter(Boolean).join(" · ");
+      art = li.art; playing = li.playing; pos = li.pos; dur = li.dur;
+    } else if (youtube.isPlaying()) {
       title = "YouTube · " + (youtube.title() || "Playing"); sub = "Playing on this screen"; playing = true;
     } else if (youtube.hasPlayer() && activeSource === "youtube") {
       title = "YouTube · " + (youtube.title() || "Paused"); sub = "Paused"; playing = false;
@@ -2018,11 +2030,15 @@
   }
 
   function showMediaPanel(source) {
-    activeSource = source === "youtube" ? "youtube" : "spotify";
+    activeSource = source === "youtube" ? "youtube" : source === "local" && localMusic ? "local" : "spotify";
     store.set("activeSource", activeSource);
-    var sp = $("spotify-panel"), yt = $("youtube-panel");
+    var sp = $("spotify-panel"), yt = $("youtube-panel"), lm = $("local-panel");
     if (sp) sp.style.display = activeSource === "spotify" ? "" : "none";
     if (yt) yt.style.display = activeSource === "youtube" ? "" : "none";
+    if (lm) lm.style.display = activeSource === "local" ? "" : "none";
+    if (activeSource !== "spotify" && document.body.classList.contains("sp-full")) spotify.setFull(false);
+    if (activeSource !== "local" && localMusic && document.body.classList.contains("lm-full")) localMusic.setFull(false);
+    if (activeSource === "local") localMusic.onShow();
     // the Spotify settings menu belongs to the Spotify panel (on YouTube it would cover the Play button)
     toggleClass($("sp-menu-wrap"), "off-source", activeSource !== "spotify");
     each(document.querySelectorAll(".shortcut-btn"), function (b) {
@@ -2043,6 +2059,8 @@
 
   // Volume goes to whichever player is in use: YouTube, Spotify, or (demo) nothing.
   function applyVolume(v) {
+    if (localMusic) localMusic.setVolume(v); // the <audio> element always follows the slider
+    if (activeSource === "local" || (localMusic && localMusic.isPlaying())) return;
     if (activeSource === "youtube" && youtube.hasPlayer()) youtube.setVolume(v);
     else if (spotify.connected()) spotify.setVolume(v);
   }
@@ -2057,15 +2075,17 @@
     paintVolume();
     applyVolume(v);
   }
-  if ($("sp-full-vol")) {
+  each(["sp-full-vol", "lm-full-vol"], function (id) {
+    var fv = $(id);
+    if (!fv) return;
     var fullVolInput = function () {
       if (!volumeSlider) return;
-      volumeSlider.value = $("sp-full-vol").value;
+      volumeSlider.value = fv.value;
       onVolumeInput();
     };
-    $("sp-full-vol").addEventListener("input", fullVolInput);
-    $("sp-full-vol").addEventListener("change", fullVolInput);
-  }
+    fv.addEventListener("input", fullVolInput);
+    fv.addEventListener("change", fullVolInput);
+  });
   if (volumeSlider) {
     volumeSlider.addEventListener("input", onVolumeInput);
     volumeSlider.addEventListener("change", onVolumeInput); // very old WebViews only fire "change"
@@ -2091,9 +2111,9 @@
 
   // Home bar buttons do what the Media page buttons do (YouTube: play/pause the video).
   function homeCtl(id, fn) { if ($(id)) $(id).addEventListener("click", function (e) { if (e.stopPropagation) e.stopPropagation(); fn(); }); }
-  homeCtl("home-play", function () { if (youtube.isPlaying() || (activeSource === "youtube" && youtube.hasPlayer())) youtube.togglePause(); else if (playBtn) playBtn.click(); });
-  homeCtl("home-prev", function () { if (prevBtn) prevBtn.click(); });
-  homeCtl("home-next", function () { if (nextBtn) nextBtn.click(); });
+  homeCtl("home-play", function () { if (localOwns()) localMusic.toggle(); else if (youtube.isPlaying() || (activeSource === "youtube" && youtube.hasPlayer())) youtube.togglePause(); else if (playBtn) playBtn.click(); });
+  homeCtl("home-prev", function () { if (localOwns()) localMusic.prev(); else if (prevBtn) prevBtn.click(); });
+  homeCtl("home-next", function () { if (localOwns()) localMusic.next(); else if (nextBtn) nextBtn.click(); });
 
   // Repeat: Off -> All -> One. Sent to Spotify when connected (Premium), local otherwise.
   var REPEAT_MODES = ["off", "context", "track"], REPEAT_LABELS = { off: "Off", context: "All", track: "One" };
@@ -2481,6 +2501,7 @@
         render();
       }
       var m = playing ? "pause" : "play";
+      if (!playing) pauseLocal(); // only one thing plays at a time
       api("PUT", "/me/player/" + m, undefined, function (err) {
         if (err && state) { state.is_playing = playing; }
         onCommandError(err);
@@ -3097,7 +3118,7 @@
       if (!TABS[t]) t = "playlists";
       tab = t;
       stack = [];
-      each(document.querySelectorAll(".spb-tab"), function (b) { toggleClass(b, "active", b.getAttribute("data-tab") === t); b.setAttribute("aria-selected", b.getAttribute("data-tab") === t ? "true" : "false"); });
+      each($("spb-tabs") ? $("spb-tabs").querySelectorAll(".spb-tab") : [], function (b) { toggleClass(b, "active", b.getAttribute("data-tab") === t); b.setAttribute("aria-selected", b.getAttribute("data-tab") === t ? "true" : "false"); });
       var T = TABS[t];
       var v = { kind: "tab", tab: t, path: T.path, layout: T.layout, empty: T.empty };
       if (t === "liked") {
@@ -3261,6 +3282,7 @@
     }
     var playSeq = 0; // a newer tap cancels the checks/retries of an older one
     function startPlayback(plan, shuffle) {
+      pauseLocal(); // only one thing plays at a time
       var mySeq = ++playSeq;
       function stale() { return mySeq !== playSeq; }
       var bodies = isList(plan) ? plan : [plan];
@@ -3520,7 +3542,7 @@
       body = $("spb-body"); head = $("spb-head");
       if (!body) return;
       body.addEventListener("scroll", onScroll);
-      each(document.querySelectorAll(".spb-tab"), function (b) {
+      each($("spb-tabs") ? $("spb-tabs").querySelectorAll(".spb-tab") : [], function (b) {
         b.addEventListener("click", function () { closeSheet(); if ($("spb-search")) $("spb-search").value = ""; setTab(b.getAttribute("data-tab")); });
       });
       var input = $("spb-search");
@@ -3630,6 +3652,7 @@
             onStateChange: function (ev) {
               // 1 = playing, 2 = paused, 0 = ended
               setPlaying(ev.data === 1 || (ev.data === 3 && playing));
+              if (ev.data === 1) pauseLocal(); // only one thing plays at a time
               if (ev.data === 1) msg("");
             },
             onError: function (ev) { msg(errorText(ev.data)); setPlaying(false); }
@@ -3937,17 +3960,33 @@
     var savedOutput = store.get("connectedOutput");
     if (savedOutput) connectedOutput = savedOutput;
     var savedSource = store.get("activeSource");
+    if (window.createLocalMusic) {
+      localMusic = window.createLocalMusic({
+        CFG: CFG, store: store, fmtDuration: fmtDuration,
+        volume: function () { return isMuted ? 0 : volumeLevel; },
+        paintVolume: paintVolume,
+        onChange: updateNowPlaying,
+        onProgress: function () { if (localOwns()) { var li = localMusic.info(); if (li) homeProgress(li.pos, li.dur); } },
+        // Local Music is starting: stop Spotify (if it's playing) and YouTube
+        stopOthers: function () {
+          var st = spotify.connected() ? spotify.getState() : null;
+          if (st && st.is_playing) { st.is_playing = false; spotify.command("pause"); }
+          if (youtube.isPlaying()) youtube.togglePause();
+        }
+      });
+    }
     youtube.init();
     bluetooth.init();
     spBrowse.init();
     var fromCallback = spotify.init();
-    showMediaPanel(fromCallback ? "spotify" : (savedSource === "youtube" ? "youtube" : "spotify"));
+    if (localMusic) localMusic.init();
+    showMediaPanel(fromCallback ? "spotify" : (savedSource === "youtube" || savedSource === "local" ? savedSource : "spotify"));
     paintVolume();
     return fromCallback;
   }
   var cameFromSpotify = restoreMediaState();
   // debug/testing hook (harmless): lets tests and the console reach the media modules
-  window.__dashMedia = { spotify: spotify, youtube: youtube, bluetooth: bluetooth, sha256: sha256, base64url: base64url };
+  window.__dashMedia = { spotify: spotify, youtube: youtube, bluetooth: bluetooth, sha256: sha256, base64url: base64url, localMusic: localMusic };
   window.__dashRadar = radar;
   window.__dashSpBrowse = spBrowse;
   window.__dashSummarizeDay = summarizeDay;

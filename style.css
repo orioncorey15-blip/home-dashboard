@@ -189,6 +189,7 @@ body.nav-hidden.nav-peek .nav-handle { display: none; }
 /* night mode dims everything ~66%: a little stronger so it stays findable, still subtle */
 body.night .nav-handle::before { background: rgba(255, 255, 255, 0.42); }
 body.sp-full .nav-handle { display: none; }
+body.lm-full .nav-handle { display: none; }
 
 /* phones keep the bottom tab bar; no auto-hide there */
 @media (max-width: 600px) {
@@ -705,6 +706,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 
 .media-panel { width: 100%; -webkit-flex: 1; flex: 1; min-height: 0; display: -webkit-flex; display: flex; }
 #spotify-panel { -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }
+#local-panel { -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }
 #youtube-panel { -webkit-flex-direction: column; flex-direction: column; }
 #youtube-panel > * + * { margin-top: 12px; }
 
@@ -726,12 +728,15 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .album-art.has-art .album-art-label { display: none; }
 .album-art-label svg { width: 76px; height: 76px; }
 #sp-art { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+#lm-art { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
 .sp-side { -webkit-flex: 1; flex: 1; min-width: 0; max-width: 480px; margin-left: 40px; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; text-align: center; }
 .sp-side > * + * { margin-top: 18px; }
 .now-playing { width: 100%; }
 .now-playing .eyebrow { color: #1ed760; margin-bottom: 6px; }
 #play-status { display: block; font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+#lm-title { display: block; font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
 #track-info { display: block; font-size: 16px; color: rgba(228, 234, 250, 0.64); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#lm-sub { display: block; font-size: 16px; color: rgba(228, 234, 250, 0.64); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sp-progress-wrap { width: 100%; max-width: 420px; }
 .sp-progress { height: 5px; background: rgba(255, 255, 255, 0.14); border-radius: 3px; overflow: hidden; }
 .sp-progress-bar { height: 100%; width: 0; border-radius: 3px; background: -webkit-linear-gradient(left, #e9a54a, #f6c77a); background: linear-gradient(90deg, #e9a54a, #f6c77a); }
@@ -948,6 +953,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 
   .media-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; grid-template-areas: "player" "vol" "source"; }
   #spotify-panel { -webkit-justify-content: center; justify-content: center; }
+  #local-panel { -webkit-justify-content: center; justify-content: center; }
   .sp-player { -webkit-flex-direction: column; flex-direction: column; }
   .vol-scale { display: none; }
   .vol-body { -webkit-flex: 1; flex: 1; margin: 0; -webkit-align-items: center; align-items: center; }
@@ -956,7 +962,9 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
   .sp-side { -webkit-flex: none; flex: none; margin: 40px 0 0; width: 100%; max-width: 560px; }
   .sp-side > * + * { margin-top: 22px; }
   #play-status { font-size: 40px; }
+  #lm-title { font-size: 40px; }
   #track-info { font-size: 19px; }
+  #lm-sub { font-size: 19px; }
   .media-controls > * + * { margin-left: 30px; }
   .media-controls .icon-btn { width: 70px; height: 70px; }
   .media-controls .icon-btn svg { width: 28px; height: 28px; }
@@ -1088,7 +1096,9 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
   .sp-side { margin-left: 26px; }
   .sp-side > * + * { margin-top: 10px; }
   #play-status { font-size: 24px; }
+  #lm-title { font-size: 24px; }
   #track-info { font-size: 14px; }
+  #lm-sub { font-size: 14px; }
   .icon-btn { width: 50px; height: 50px; }
   .icon-btn.play { width: 68px; height: 68px; }
   .icon-btn.play svg { width: 26px; height: 26px; }
@@ -1173,6 +1183,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 /* =====================  SPOTIFY: browse + mini player + full screen  ===================== */
 /* Connected: the browse area takes the card, the player shrinks to a bar under it. */
 #spotify-panel.sp-connected { -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: stretch; align-items: stretch; -webkit-justify-content: flex-start; justify-content: flex-start; }
+#local-panel.sp-connected { -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: stretch; align-items: stretch; -webkit-justify-content: flex-start; justify-content: flex-start; }
 .sp-player { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; width: 100%; -webkit-flex: 1; flex: 1; min-height: 0; }
 .sp-full-btn, .sp-full-close { display: none; }
 
@@ -1187,7 +1198,10 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .spb-search svg { position: absolute; left: 12px; top: 50%; width: 18px; height: 18px; margin-top: -9px; color: rgba(228, 234, 250, 0.55); }
 #spb-search { width: 100%; height: 44px; padding: 0 12px 0 38px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.22); font-size: 14px; outline: none; -webkit-appearance: none; appearance: none; }
+#lm-search { width: 100%; height: 44px; padding: 0 12px 0 38px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22); font-size: 14px; outline: none; -webkit-appearance: none; appearance: none; }
 #spb-search:focus { border-color: rgba(30, 215, 96, 0.6); }
+#lm-search:focus { border-color: rgba(30, 215, 96, 0.6); }
 .spb-tool { -webkit-flex-shrink: 0; flex-shrink: 0; width: 44px; height: 44px; margin-left: 8px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05); color: rgba(228, 234, 250, 0.85); cursor: pointer; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; padding: 0; }
 .spb-tool svg { width: 20px; height: 20px; }
@@ -1266,7 +1280,9 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .sp-connected .now-playing { -webkit-flex: 1; flex: 1; min-width: 0; cursor: pointer; }
 .sp-connected .now-playing .eyebrow { display: none; }
 .sp-connected #play-status { font-size: 17px; white-space: nowrap; }
+.sp-connected #lm-title { font-size: 17px; white-space: nowrap; }
 .sp-connected #track-info { font-size: 13px; margin-top: 3px; }
+.sp-connected #lm-sub { font-size: 13px; margin-top: 3px; }
 .sp-connected .sp-progress-wrap { position: absolute; left: 16px; right: 16px; bottom: 6px; width: auto; max-width: none; }
 .sp-connected .sp-progress { height: 3px; }
 .sp-connected .sp-times { display: none; }
@@ -1295,49 +1311,90 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 body.sp-full .sp-connected .sp-player { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 400; height: auto; margin: 0; padding: 40px 64px; border: none; border-radius: 0;
   -webkit-justify-content: center;
           justify-content: center; background: #0b1020; background: -webkit-radial-gradient(20% 20%, 900px 600px, rgba(30, 215, 96, 0.14), rgba(30, 215, 96, 0) 60%), -webkit-linear-gradient(top, #10172e 0%, #0b1020 100%); background: radial-gradient(900px 600px at 20% 20%, rgba(30, 215, 96, 0.14), rgba(30, 215, 96, 0) 60%), linear-gradient(180deg, #10172e 0%, #0b1020 100%); }
+body.lm-full .sp-connected .sp-player { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 400; height: auto; margin: 0; padding: 40px 64px; border: none; border-radius: 0;
+  -webkit-justify-content: center;
+          justify-content: center; background: #0b1020; background: -webkit-radial-gradient(20% 20%, 900px 600px, rgba(30, 215, 96, 0.14), rgba(30, 215, 96, 0) 60%), -webkit-linear-gradient(top, #10172e 0%, #0b1020 100%); background: radial-gradient(900px 600px at 20% 20%, rgba(30, 215, 96, 0.14), rgba(30, 215, 96, 0) 60%), linear-gradient(180deg, #10172e 0%, #0b1020 100%); }
 body.sp-full .sp-connected .sp-player .album-art { width: 56vh; max-width: 44vw; border-radius: 22px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55); }
+body.lm-full .sp-connected .sp-player .album-art { width: 56vh; max-width: 44vw; border-radius: 22px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55); }
 body.sp-full .sp-connected .sp-player .album-art-label svg { width: 76px; height: 76px; }
+body.lm-full .sp-connected .sp-player .album-art-label svg { width: 76px; height: 76px; }
 body.sp-full .sp-connected .sp-side { -webkit-flex: 0 1 560px; flex: 0 1 560px; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: flex-start; align-items: flex-start; margin: 0 0 0 56px; }
+body.lm-full .sp-connected .sp-side { -webkit-flex: 0 1 560px; flex: 0 1 560px; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: flex-start; align-items: flex-start; margin: 0 0 0 56px; }
 body.sp-full .sp-connected .sp-side > * + * { margin-top: 20px; }
+body.lm-full .sp-connected .sp-side > * + * { margin-top: 20px; }
 body.sp-full .sp-connected .now-playing .eyebrow { display: block; }
+body.lm-full .sp-connected .now-playing .eyebrow { display: block; }
 body.sp-full .sp-connected #play-status { font-size: 40px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+body.lm-full .sp-connected #lm-title { font-size: 40px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 body.sp-full .sp-connected #track-info { font-size: 18px; margin-top: 8px; }
+body.lm-full .sp-connected #lm-sub { font-size: 18px; margin-top: 8px; }
 body.sp-full .sp-connected .sp-progress-wrap { position: static; width: 100%; max-width: none; }
+body.lm-full .sp-connected .sp-progress-wrap { position: static; width: 100%; max-width: none; }
 /* full screen: the bar is tappable to seek, with a 44 px tall touch area */
 body.sp-full .sp-connected .sp-progress-wrap { cursor: pointer; padding-top: 17px; margin-top: -3px; } /* also ~14 px below the artist line */
+body.lm-full .sp-connected .sp-progress-wrap { cursor: pointer; padding-top: 17px; margin-top: -3px; }
 body.sp-full .sp-connected .sp-progress { height: 6px; }
+body.lm-full .sp-connected .sp-progress { height: 6px; }
 body.sp-full .sp-connected .sp-times { display: -webkit-flex; display: flex; }
+body.lm-full .sp-connected .sp-times { display: -webkit-flex; display: flex; }
 body.sp-full .sp-connected .media-controls { margin-left: 0; }
+body.lm-full .sp-connected .media-controls { margin-left: 0; }
 body.sp-full .sp-connected .media-controls > * + * { margin-left: 24px; }
+body.lm-full .sp-connected .media-controls > * + * { margin-left: 24px; }
 body.sp-full .sp-connected .icon-btn { width: 64px; height: 64px; }
+body.lm-full .sp-connected .icon-btn { width: 64px; height: 64px; }
 body.sp-full .sp-connected .icon-btn.play { width: 92px; height: 92px; }
+body.lm-full .sp-connected .icon-btn.play { width: 92px; height: 92px; }
 body.sp-full .sp-connected .icon-btn.play svg { width: 34px; height: 34px; }
+body.lm-full .sp-connected .icon-btn.play svg { width: 34px; height: 34px; }
 body.sp-full .sp-connected .sp-modes { margin-left: 0; }
+body.lm-full .sp-connected .sp-modes { margin-left: 0; }
 body.sp-full .sp-connected .sp-modes .repeat-btn { width: auto; padding: 6px 14px; }
+body.lm-full .sp-connected .sp-modes .repeat-btn { width: auto; padding: 6px 14px; }
 body.sp-full .sp-connected .sp-modes .repeat-btn svg { margin-right: 8px; }
+body.lm-full .sp-connected .sp-modes .repeat-btn svg { margin-right: 8px; }
 body.sp-full .sp-connected .sp-modes .repeat-btn span { display: inline; }
+body.lm-full .sp-connected .sp-modes .repeat-btn span { display: inline; }
 body.sp-full .sp-connected .sp-modes .repeat-btn .repeat-state { position: static; display: inline; margin-left: 8px; padding: 2px 8px; font-size: 11px; line-height: normal; }
+body.lm-full .sp-connected .sp-modes .repeat-btn .repeat-state { position: static; display: inline; margin-left: 8px; padding: 2px 8px; font-size: 11px; line-height: normal; }
 body.sp-full .sp-connected .sp-full-vol { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%; max-width: 420px; color: rgba(228, 234, 250, 0.7); }
+body.lm-full .sp-connected .sp-full-vol { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%; max-width: 420px; color: rgba(228, 234, 250, 0.7); }
 #sp-full-vol { -webkit-flex: 1; flex: 1; min-width: 0; height: 44px; margin: 0 12px; -webkit-appearance: none; appearance: none; background-color: transparent;
   background-image: -webkit-linear-gradient(left, #e9a54a, #f6c77a), -webkit-linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
   background-image: linear-gradient(90deg, #e9a54a, #f6c77a), linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
   background-repeat: no-repeat, no-repeat; background-position: 0 50%, 0 50%; background-size: 60% 8px, 100% 8px; border-radius: 4px; outline: none; cursor: pointer; }
+#lm-full-vol { -webkit-flex: 1; flex: 1; min-width: 0; height: 44px; margin: 0 12px; -webkit-appearance: none; appearance: none; background-color: transparent;
+  background-image: -webkit-linear-gradient(left, #e9a54a, #f6c77a), -webkit-linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
+  background-image: linear-gradient(90deg, #e9a54a, #f6c77a), linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
+  background-repeat: no-repeat, no-repeat; background-position: 0 50%, 0 50%; background-size: 60% 8px, 100% 8px; border-radius: 4px; outline: none; cursor: pointer; }
 #sp-full-vol::-webkit-slider-runnable-track { height: 8px; background: transparent; }
+#lm-full-vol::-webkit-slider-runnable-track { height: 8px; background: transparent; }
 #sp-full-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+#lm-full-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
 #sp-full-vol::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: none; }
+#lm-full-vol::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: none; }
 body.sp-full .sp-connected .sp-device { display: block; font-size: 14px; color: rgba(228, 234, 250, 0.6); }
+body.lm-full .sp-connected .sp-device { display: block; font-size: 14px; color: rgba(228, 234, 250, 0.6); }
 body.sp-full .sp-connected .sp-device:empty { display: none; }
+body.lm-full .sp-connected .sp-device:empty { display: none; }
 body.sp-full .sp-connected .sp-watch-btn { margin-left: 0; height: 44px; font-size: 14px; }
+body.lm-full .sp-connected .sp-watch-btn { margin-left: 0; height: 44px; font-size: 14px; }
 body.sp-full .sp-connected .sp-message { position: static; -webkit-transform: none; transform: none; background: none; border: none; box-shadow: none; padding: 0; }
+body.lm-full .sp-connected .sp-message { position: static; -webkit-transform: none; transform: none; background: none; border: none; box-shadow: none; padding: 0; }
 body.sp-full .sp-connected .sp-full-btn { display: none; }
+body.lm-full .sp-connected .sp-full-btn { display: none; }
 body.sp-full .sp-connected .sp-full-close { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; position: absolute; top: 22px; right: 26px; width: 52px; height: 52px; padding: 0;
   border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.08); color: #fff; cursor: pointer; }
+body.lm-full .sp-connected .sp-full-close { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; position: absolute; top: 22px; right: 26px; width: 52px; height: 52px; padding: 0;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.08); color: #fff; cursor: pointer; }
 body.sp-full .sp-connected .sp-full-close svg { width: 26px; height: 26px; }
+body.lm-full .sp-connected .sp-full-close svg { width: 26px; height: 26px; }
 
 /* smaller landscape tablets (1024x600) */
 @media (max-height: 650px) {
   .spb-tab { height: 36px; padding: 0 12px; font-size: 13px; margin-right: 6px; }
   #spb-search { height: 36px; padding-right: 6px; font-size: 13px; }
+  #lm-search { height: 36px; padding-right: 6px; font-size: 13px; }
   .spb-tool { width: 36px; height: 36px; }
   .spb-search { -webkit-flex-basis: 150px; flex-basis: 150px; min-width: 110px; }
   .spb-tab { padding: 0 11px; margin-right: 5px; }
@@ -1352,10 +1409,15 @@ body.sp-full .sp-connected .sp-full-close svg { width: 26px; height: 26px; }
   .sp-connected .icon-btn.play { width: 48px; height: 48px; }
   .sp-connected .sp-message { bottom: 74px; }
   body.sp-full .sp-connected .sp-player { padding: 24px 40px; }
+  body.lm-full .sp-connected .sp-player { padding: 24px 40px; }
   body.sp-full .sp-connected #play-status { font-size: 30px; }
+  body.lm-full .sp-connected #lm-title { font-size: 30px; }
   body.sp-full .sp-connected .sp-side > * + * { margin-top: 12px; }
+  body.lm-full .sp-connected .sp-side > * + * { margin-top: 12px; }
   body.sp-full .sp-connected .icon-btn.play { width: 72px; height: 72px; }
+  body.lm-full .sp-connected .icon-btn.play { width: 72px; height: 72px; }
   body.sp-full .sp-connected .icon-btn { width: 54px; height: 54px; }
+  body.lm-full .sp-connected .icon-btn { width: 54px; height: 54px; }
 }
 /* portrait: just keep it usable */
 @media (orientation: portrait) {
@@ -1363,17 +1425,23 @@ body.sp-full .sp-connected .sp-full-close svg { width: 26px; height: 26px; }
   .spb-tabs { -webkit-flex: 1 1 100%; flex: 1 1 100%; margin-bottom: 8px; }
   .spb-search { -webkit-flex: 1 1 auto; flex: 1 1 auto; margin-left: 0; }
   body.sp-full .sp-connected .sp-player { -webkit-flex-direction: column; flex-direction: column; padding: 60px 40px; }
+  body.lm-full .sp-connected .sp-player { -webkit-flex-direction: column; flex-direction: column; padding: 60px 40px; }
   body.sp-full .sp-connected .sp-player .album-art { width: 70vw; max-width: 520px; }
+  body.lm-full .sp-connected .sp-player .album-art { width: 70vw; max-width: 520px; }
   body.sp-full .sp-connected .sp-side { -webkit-flex: none; flex: none; width: 100%; margin: 32px 0 0; -webkit-align-items: center; align-items: center; text-align: center; }
+  body.lm-full .sp-connected .sp-side { -webkit-flex: none; flex: none; width: 100%; margin: 32px 0 0; -webkit-align-items: center; align-items: center; text-align: center; }
   .sp-connected .sp-modes, .sp-connected .sp-watch-btn { display: none; }
   body.sp-full .sp-connected .sp-modes { display: -webkit-flex; display: flex; }
+  body.lm-full .sp-connected .sp-modes { display: -webkit-flex; display: flex; }
 }
 .sp-message.sticky { cursor: pointer; }
 
 /* full screen: no volume slider when the device can't take volume commands */
 .sp-full-vol-note { display: none; }
 body.sp-full .sp-connected .sp-full-vol.vol-off { display: none; }
+body.lm-full .sp-connected .sp-full-vol.vol-off { display: none; }
 body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: block; min-height: 44px; line-height: 44px; font-size: 13px; color: rgba(228, 234, 250, 0.64); }
+body.lm-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: block; min-height: 44px; line-height: 44px; font-size: 13px; color: rgba(228, 234, 250, 0.64); }
 
 /* songs Spotify can't play (local files, not available in this country) */
 .spb-row.unplayable { opacity: 0.45; }
@@ -1391,8 +1459,10 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
             transform: translate(-50%, -50%);
   }
   #spb-search { height: 44px; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); padding: 0 7px 0 39px; }
+  #lm-search { height: 44px; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); padding: 0 7px 0 39px; }
   .spb-search svg { left: 16px; }
   #spb-search:focus { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(30, 215, 96, 0.6); }
+  #lm-search:focus { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(30, 215, 96, 0.6); }
   .spb-search { margin: -4px -4px -4px 2px; -webkit-flex-basis: 158px; flex-basis: 158px; min-width: 118px; }
 }
 
@@ -1432,4 +1502,59 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
 /* Narrow portrait: the not-connected (demo) Spotify panel's cover was 60 px too tall for the card */
 @media (orientation: portrait) and (max-width: 700px) {
   .album-art { width: 50%; }
+}
+
+/* =====================  LOCAL MUSIC (Navidrome): same look as Spotify, violet accent  ===================== */
+.shortcut-btn[data-source="local"] svg { color: #b49cff; }
+.shortcut-btn[data-source="local"] .fill { fill: currentColor; stroke: none; }
+.shortcut-btn[data-source="local"].active { background: rgba(180, 156, 255, 0.12); border-color: rgba(180, 156, 255, 0.55); }
+
+.lm-panel .now-playing .eyebrow { color: #b49cff; }
+.lm-panel .spb-bar { padding-right: 0; }
+.lm-panel .spb-tab.active, .lm-panel .spb-tool.active { background: rgba(180, 156, 255, 0.16); border-color: rgba(180, 156, 255, 0.55); color: #fff; }
+.lm-panel .spb-tool.active { color: #c9b8ff; }
+#lm-search:focus { border-color: rgba(180, 156, 255, 0.6); }
+.lm-panel .spb-play { background: #b49cff; color: #140b2e; }
+.lm-panel .spb-row.playing .spb-name { color: #c9b8ff; }
+.lm-panel .repeat-btn.shuffle-btn.on { color: #c9b8ff; }
+.lm-panel .spb-cover img + svg { display: none; }
+body.lm-full .lm-panel .sp-player { background: #0b1020; background: -webkit-radial-gradient(20% 20%, 900px 600px, rgba(180, 156, 255, 0.16), rgba(180, 156, 255, 0) 60%), -webkit-linear-gradient(top, #10172e 0%, #0b1020 100%); background: radial-gradient(900px 600px at 20% 20%, rgba(180, 156, 255, 0.16), rgba(180, 156, 255, 0) 60%), linear-gradient(180deg, #10172e 0%, #0b1020 100%); }
+body.lm-full .nav-handle { display: none; }
+
+/* album sort chips (Newest / Recently played / Random / A-Z) */
+.lm-chips { grid-column: 1 / -1; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin-bottom: 4px; }
+.lm-chip { height: 36px; padding: 0 14px; margin: 0 8px 6px 0; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04); color: rgba(228, 234, 250, 0.8); font: inherit; font-size: 14px; cursor: pointer; position: relative; }
+.lm-chip::before { content: ""; position: absolute; left: 0; right: 0; top: -4px; bottom: -4px; } /* 44 px touch area */
+.lm-chip.active { background: rgba(180, 156, 255, 0.16); border-color: rgba(180, 156, 255, 0.55); color: #fff; }
+
+/* sign-in form */
+.lm-setup { -webkit-flex: 1; flex: 1; min-height: 0; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow-y: auto; padding: 8px; }
+.lm-setup-card { width: 100%; max-width: 440px; }
+.lm-setup-title { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+.lm-setup-sub { font-size: 14px; color: rgba(228, 234, 250, 0.64); margin: 6px 0 14px; }
+.lm-field { display: block; margin-bottom: 10px; }
+.lm-field span { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(228, 234, 250, 0.56); margin-bottom: 4px; }
+.lm-field input { display: block; width: 100%; height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05); color: #f4f6fb; font: inherit; font-size: 16px; }
+.lm-field input:focus { outline: none; border-color: rgba(180, 156, 255, 0.6); }
+.lm-signin { width: 100%; min-height: 48px; margin-top: 4px; border: none; border-radius: 999px; background: #b49cff; color: #140b2e; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+.lm-signin[disabled] { opacity: 0.6; }
+.lm-setup-msg { min-height: 20px; margin-top: 10px; font-size: 14px; color: rgba(228, 234, 250, 0.8); }
+.lm-setup-msg.bad { color: #ffb4a8; }
+.lm-setup-note { font-size: 12px; color: rgba(228, 234, 250, 0.5); }
+
+/* account sheet */
+.lm-account { padding: 6px 18px 18px; }
+.lm-account .spb-name { margin-bottom: 10px; word-break: break-all; white-space: normal; }
+.lm-signout { margin: 6px 0 10px; min-height: 44px; }
+
+/* compact (A7 Lite landscape): a tighter form */
+@media (max-height: 650px) {
+  .lm-setup-title { font-size: 22px; }
+  .lm-setup-sub { margin-bottom: 8px; }
+  .lm-field { margin-bottom: 6px; }
+  .lm-field input { height: 44px; }
+  .lm-chip { height: 34px; }
+  .lm-chip::before { top: -5px; bottom: -5px; }
 }
