@@ -1423,3 +1423,8 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
   .spb-tab:last-child { margin-right: 0; }
   .spb-search { -webkit-flex: 1 1 150px; flex: 1 1 150px; min-width: 0; }
 }
+
+/* Narrow portrait: the not-connected (demo) Spotify panel's cover was 60 px too tall for the card */
+@media (orientation: portrait) and (max-width: 700px) {
+  .album-art { width: 62%; }
+}
