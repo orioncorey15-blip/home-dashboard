@@ -775,6 +775,9 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .media-volume.vol-off .vol-body, .media-volume.vol-off .mute-btn { display: none; }
 .media-volume.vol-off { -webkit-justify-content: center; justify-content: center; }
 .media-volume.vol-off .vol-note { display: block; margin-top: 14px; padding: 0 4px; font-size: 13px; line-height: 1.4; text-align: center; color: rgba(228, 234, 250, 0.7); }
+/* diagnostic: is Fully Kiosk's JavaScript Interface reachable? */
+.vol-diag { margin-top: 8px; font-size: 11px; line-height: 1.3; text-align: center; color: rgba(228, 234, 250, 0.5); }
+.vol-diag.on { color: rgba(140, 220, 160, 0.75); }
 
 /* YouTube */
 .yt-bar { display: -webkit-flex; display: flex; width: 100%; }

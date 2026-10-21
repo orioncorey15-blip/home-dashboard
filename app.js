@@ -2095,6 +2095,34 @@
    * Small XHR helper for Spotify (needs methods + headers + bodies).
    * cb(err, data, status, xhr); err has .status, .reason (e.g. PREMIUM_REQUIRED), .retryAfter.
    */
+  /* Fully Kiosk's JavaScript Interface (PLUS; Settings > Advanced Web Settings > Enable JavaScript Interface).
+     Fully injects a global `fully` object into every page load when that setting is on (a page loaded before the
+     setting was switched on needs a reload). Always look it up fresh, never cache a "not there". */
+  function getFully() {
+    try { return (typeof fully !== "undefined" && fully) ? fully : null; } catch (e) { return null; }
+  }
+  function fullyHas(name) { var f = getFully(); try { return !!(f && typeof f[name] === "function"); } catch (e) { return false; } }
+  // This tablet's own names as Fully reports them (model e.g. "SM-T220", device name e.g. "Galaxy Tab A7 Lite").
+  // Spotify's Android app usually shows up under one of them.
+  function myDeviceNames() {
+    var f = getFully(), out = [];
+    if (!f) return out;
+    each(["getDeviceModel", "getDeviceName"], function (fn) {
+      try { if (typeof f[fn] === "function") { var n = String(f[fn]() || "").toLowerCase(); if (n) out.push(n); } } catch (e) { /* not available */ }
+    });
+    return out;
+  }
+  // Is this Spotify device this tablet? SPOTIFY_DEVICE_NAME wins; else its name must match Fully's model/name.
+  function isMyDevice(dev) {
+    if (!dev) return false;
+    var name = String(dev.name || "").toLowerCase();
+    var want = String(CFG.SPOTIFY_DEVICE_NAME || "").toLowerCase();
+    if (want) return name.indexOf(want) !== -1;
+    var mine = myDeviceNames();
+    for (var i = 0; i < mine.length; i++) if (name && (name.indexOf(mine[i]) !== -1 || mine[i].indexOf(name) !== -1)) return true;
+    return false;
+  }
+
   function request(method, url, headers, body, cb) {
     var xhr = new XMLHttpRequest();
     var finished = false;
@@ -2361,27 +2389,18 @@
        with 403 VOLUME_CONTROL_DISALLOW. So when Spotify plays on this tablet, the slider sets Android's music
        volume (stream 3) through Fully Kiosk's JavaScript Interface: fully.setAudioVolume(percent, 3).
        That needs Fully Kiosk PLUS with Settings > Advanced Web Settings > Enable JavaScript Interface turned on;
-       without it window.fully (or fully.setAudioVolume) is missing and we fall back to the Web API.
+       without it the global `fully` (or fully.setAudioVolume) is missing and we fall back to the Web API.
        Other devices (speakers, TVs) use the Web API when they support volume; if nothing can set the volume,
        the slider is hidden and a short note says to use the tablet's volume buttons. */
     var MUSIC_STREAM = 3;
     var volBlocked = {}; // device id -> true after a 403 VOLUME_CONTROL_DISALLOW
-    function fullyVolume() { var f = window.fully; return !!(f && typeof f.setAudioVolume === "function"); }
+    function fullyVolume() { return fullyHas("setAudioVolume"); } // checked on every use, never cached
     // Is Spotify playing on this tablet (so its media volume is the one to change)? A phone in the
     // household is also a "Smartphone" with supports_volume false, so a Smartphone only counts when its
     // Spotify name matches the Android device name/model Fully reports (or SPOTIFY_DEVICE_NAME).
     function isThisTablet(dev) {
       if (!dev) return true;
-      var name = String(dev.name || "").toLowerCase();
-      var want = String(CFG.SPOTIFY_DEVICE_NAME || "").toLowerCase();
-      if (want) return name.indexOf(want) !== -1;
-      if (/tablet/i.test(String(dev.type || ""))) return true;
-      if (!/smartphone/i.test(String(dev.type || ""))) return false;
-      var f = window.fully, mine = [];
-      try { mine.push(String(f.getDeviceName() || "").toLowerCase()); } catch (e) { /* not available */ }
-      try { mine.push(String(f.getDeviceModel() || "").toLowerCase()); } catch (e) { /* not available */ }
-      for (var i = 0; i < mine.length; i++) if (mine[i] && name && (name.indexOf(mine[i]) !== -1 || mine[i].indexOf(name) !== -1)) return true;
-      return false;
+      return isMyDevice(dev) || (/tablet/i.test(String(dev.type || "")) && !String(CFG.SPOTIFY_DEVICE_NAME || ""));
     }
     // (a device's id can be null in Spotify's answer; then the volume goes to the active device without device_id)
     function devKey(dev) { return (dev && (dev.id || dev.name)) || "?"; }
@@ -2395,7 +2414,7 @@
     }
     function readFullyVolume() {
       try {
-        var f = window.fully;
+        var f = getFully();
         if (f && typeof f.getAudioVolume === "function") {
           var n = Number(f.getAudioVolume(MUSIC_STREAM));
           if (!isNaN(n) && n >= 0) return Math.max(0, Math.min(100, Math.round(n)));
@@ -2403,15 +2422,31 @@
       } catch (e) { /* not available */ }
       return null;
     }
+    // One-line status in the volume panel: "Fully: yes" when Fully Kiosk's JavaScript Interface is reachable.
+    // (Fully's default user agent is the plain Android WebView one, so with the interface off the page can't tell
+    // Fully from another Android browser: any Android browser without the interface shows "Fully: no".)
+    function fullyStatus() {
+      if (getFully()) return fullyVolume() ? "Fully: yes" : "Fully: yes (no volume API)";
+      var ua = String((navigator && navigator.userAgent) || "");
+      if (typeof FullyKiosk !== "undefined" || /Android|FullyKiosk|Fully Kiosk/i.test(ua)) return "Fully: no";
+      return "";
+    }
     function paintVolumeMode() {
       var off = activeSource === "spotify" && connected() && volumeMode() === "none";
       toggleClass(document.querySelector(".media-volume"), "vol-off", off);
       toggleClass($("sp-full-vol-wrap"), "vol-off", off);
+      var diag = $("vol-diag"), txt = fullyStatus();
+      if (diag) {
+        setText("vol-diag", txt);
+        diag.style.display = txt ? "" : "none";
+        toggleClass(diag, "on", /: yes/.test(txt));
+      }
     }
     function setVolume(v) {
+      paintVolumeMode();
       var mode = volumeMode();
       if (mode === "fully") {
-        try { window.fully.setAudioVolume(Math.round(v), MUSIC_STREAM); } catch (e) { setMessage("Couldn't change the tablet's volume."); }
+        try { getFully().setAudioVolume(Math.round(v), MUSIC_STREAM); } catch (e) { setMessage("Couldn't change the tablet's volume."); }
         return;
       }
       var dev = state && state.device;
@@ -2654,7 +2689,7 @@
       setFull: setFull, isVideoEpisode: isVideoEpisode, getState: function () { return state; },
       soon: function (ms) { schedulePoll(ms || 700); },
       homeText: homeText, deviceName: deviceName, info: info, setRepeat: setRepeat,
-      onPageChange: function () { if (connected()) { schedulePoll(currentPage === "media" ? 300 : undefined); tick(); } },
+      onPageChange: function () { paintVolumeMode(); if (connected()) { schedulePoll(currentPage === "media" ? 300 : undefined); tick(); } },
       refresh: function () { if (connected()) poll(); }
     };
   })();
@@ -2685,7 +2720,7 @@
       ";S.browser_fallback_url=" + encodeURIComponent(web) + ";end";
   }
   function openSpotifyApp(uri) {
-    var f = window.fully;
+    var f = getFully();
     try {
       if (f && uri && typeof f.startIntent === "function") { f.startIntent(spotifyIntent(uri)); return "fully-intent"; }
       if (f && typeof f.startApplication === "function") { f.startApplication(SPOTIFY_PKG); return "fully-app"; }
@@ -2961,7 +2996,7 @@
       var T = TABS[t];
       var v = { kind: "tab", tab: t, path: T.path, layout: T.layout, empty: T.empty };
       if (t === "liked") {
-        // Liked Songs has no context URI the Web API accepts: play a list of song URIs (see playList)
+        // Liked Songs: the collection context from the tapped song, a URI list as the fallback (see playList)
         v.title = "Liked Songs"; v.sub = "Your liked songs";
         v.tap = function (o, i) { playList(v.items, i, false); };
         v.playAll = function (shuffle) {
@@ -2971,11 +3006,9 @@
         };
       }
       if (t === "recent") v.tap = function (o) {
-        // Spotify only takes an offset for albums and playlists; anything else plays just that song
+        // in the playlist/album/Liked Songs it was played from, else its album, else just that song
         var ctx = o.raw && o.raw.__ctx;
-        if (!playable(o)) { cantPlay(o); return; }
-        if (ctx && /^spotify:(album|playlist):/.test(ctx)) playContext(ctx, { uri: o.uri }, false);
-        else playUris([o.uri]);
+        playTrack(o, ctx);
       };
       if (t === "recent") v.pick = function (d) {
         // remember where each song was played from, so it can play on in that playlist/album
@@ -3012,8 +3045,7 @@
           path: "/shows/" + encodeURIComponent(o.id) + "/episodes?limit=30", empty: "No episodes." };
         s.tap = function (ep) {
           if (ep.video) { showEpisode(ep); return; }
-          // (a show context doesn't take an offset; play the episode itself)
-          playUris([ep.uri]);
+          playEpisode(ep, o.uri);
         };
         show(s, true);
       } else if (o.type === "artist") {
@@ -3021,17 +3053,16 @@
         show({ kind: "artist", uri: o.uri, title: o.name, sub: "Artist", img: o.img, round: true, layout: "grid",
           path: "/artists/" + encodeURIComponent(o.id) + "/albums?include_groups=album,single&limit=30", empty: "No albums." }, true);
       } else if (o.type === "track") {
-        if (!playable(o)) { cantPlay(o); return; }
-        if (o.album) playContext(o.album, { uri: o.uri }, false); else playUris([o.uri]);
+        playTrack(o, null);
       } else if (o.type === "episode") {
-        if (o.video) showEpisode(o); else playUris([o.uri]);
+        if (o.video) showEpisode(o); else playEpisode(o, null);
       }
     }
     // video podcast episode: can play the audio here, or watch it in the Spotify app
     function showEpisode(ep) {
       if (view) view.scroll = body.scrollTop;
       var v = { kind: "episode", uri: ep.uri, title: ep.name, sub: ep.sub, img: ep.img, layout: "rows", items: [ep], watch: true,
-        tap: function () { playUris([ep.uri]); } };
+        tap: function () { playEpisode(ep, null); } };
       seq++; stack.push(view); view = v; loading = false; paint();
     }
 
@@ -3093,50 +3124,162 @@
     // body: { context_uri, offset } or { uris }. Always names the device (device_id): the active one, else
     // the best available (the tablet's own Spotify app by default); with no device at all, shows how to fix it.
     // Every failure stays on screen (sticky) until the user acts, so a tap never looks dead.
-    function startPlayback(data, shuffle) {
-      var tries = 0;
+    // Android's Spotify app falls asleep when idle: it still accepts the request (204) but plays nothing. In
+    // Fully Kiosk (JS interface on) we then wake it: fully.startApplication("com.spotify.music") and
+    // fully.bringToForeground(3000) to come back, poll /me/player/devices until the tablet shows up (matched by
+    // name/model: its id changes after a cold start), PUT /me/player {device_ids, play:false}, then play again
+    // with that device_id. Up to 2 wake-ups. Without Fully: the hint + the devices sheet with "Open Spotify app".
+    var WAKE_MS = 3000, MAX_WAKES = 2, DEVICE_POLLS = 8;
+    function canWake() { return fullyHas("startApplication"); }
+    // the tablet's own Spotify device: matched by name/model (its id changes after a cold start), else a "Tablet"
+    function pickTablet(list) {
+      var ok = [], i;
+      each(list, function (x) { if (x && x.id && !x.is_restricted) ok.push(x); });
+      for (i = 0; i < ok.length; i++) if (isMyDevice(ok[i])) return ok[i];
+      if (!String(CFG.SPOTIFY_DEVICE_NAME || "")) for (i = 0; i < ok.length; i++) if (/tablet/i.test(ok[i].type)) return ok[i];
+      return null;
+    }
+    // plan: one request body, or a list of them to try in order ({ context_uri, offset } first, a bare { uris }
+    // list as the fallback). The next one is tried when Spotify refuses the request, or accepts it (204) but the
+    // tapped song isn't playing ~2.5 s later - Spotify's Android app accepts a uris list and then ignores it.
+    // Waking the app (Fully) is the last resort, after every way has been tried.
+    var CHECK_MS = 2500;
+    function isList(x) { return Object.prototype.toString.call(x) === "[object Array]"; }
+    // is the player now playing what this body asked for?
+    function playingAsked(st, body) {
+      if (!st || !st.is_playing || !st.item) return false;
+      var cur = st.item.uri, ctx = st.context && st.context.uri;
+      if (body.offset && body.offset.uri) return cur === body.offset.uri || (!!ctx && ctx === body.context_uri && !!st.item.linked_from && st.item.linked_from.uri === body.offset.uri);
+      if (body.uris) return body.uris.indexOf(cur) !== -1;
+      if (body.context_uri) return !ctx || ctx === body.context_uri;
+      return true;
+    }
+    var playSeq = 0; // a newer tap cancels the checks/retries of an older one
+    function startPlayback(plan, shuffle) {
+      var mySeq = ++playSeq;
+      function stale() { return mySeq !== playSeq; }
+      var bodies = isList(plan) ? plan : [plan];
+      var step = 0, tries = 0, wakes = 0, curDev = "", shuffled = false;
       function send(deviceId) {
+        if (stale()) return;
+        curDev = deviceId;
+        var body = bodies[step];
         var path = "/me/player/play?device_id=" + encodeURIComponent(deviceId);
-        api("PUT", path, data, function (err, d, status) {
+        api("PUT", path, body, function (err, d, status) {
+          if (stale()) return;
           if (err && isGone(err) && tries === 0) { tries++; viaDevice(); return; } // the "active" device went away
+          if (err && isGone(err) && wakeLater()) return;
+          if (err && err.status !== 429 && err.status !== 401 && nextWay()) return; // e.g. the context was refused
           if (err) { spotify.onCommandError(err, true); return; }
           // 202: Spotify accepted it but the device isn't ready yet; try once more
           if (status === 202 && tries < 2) { tries++; setTimeout(function () { send(deviceId); }, 1500); return; }
-          spotify.setMessage("");
-          if (shuffle) spotify.setShuffle(true);
+          if (!wakes && !step) spotify.setMessage("");
+          if (shuffle && !shuffled) { shuffled = true; spotify.setShuffle(true); }
           spotify.soon(700);
-          check(deviceId);
+          check(body);
         });
       }
-      // a 204 that didn't start anything (seen with sleeping phone/tablet apps): say so instead of nothing
-      function check(deviceId) {
+      function nextWay() {
+        if (step + 1 >= bodies.length) return false;
+        step++;
+        send(curDev);
+        return true;
+      }
+      // accepted (204) but not playing what was asked: the next way, then wake the app, else say so
+      function check(body) {
         setTimeout(function () {
           api("GET", "/me/player?additional_types=episode", undefined, function (err, st) {
-            if (err || (st && st.is_playing && st.item)) return;
-            spotify.setMessage("Spotify didn't start playing. Open Spotify on the tablet, then tap the song again.", true);
+            if (err || stale()) return;
+            if (playingAsked(st, body)) { if (wakes || step) spotify.setMessage(""); return; }
+            if (nextWay()) return;
+            if (wakeLater()) return;
+            giveUp();
           });
-        }, 3500);
+        }, CHECK_MS);
+      }
+      function giveUp() {
+        spotify.setMessage("Spotify didn't start playing. Open Spotify on the tablet, then tap the song again.", true);
+        noDevice(); // the devices sheet has "Open Spotify app"
+      }
+      // wake the tablet's Spotify app (Fully only), then find its device and play again; false = can't
+      function wakeLater() {
+        if (stale() || !canWake() || wakes >= MAX_WAKES) return false;
+        wakes++;
+        spotify.setMessage("Waking up Spotify on the tablet…", true);
+        setTimeout(function () {
+          var f = getFully();
+          try { f.startApplication(SPOTIFY_PKG); } catch (e) { giveUp(); return; }
+          // Fully comes back by itself (native timer; JS timers can be throttled while in the background)
+          try { if (typeof f.bringToForeground === "function") f.bringToForeground(WAKE_MS); } catch (e2) { /* older Fully */ }
+          waitForTablet(0);
+        }, wakes === 1 ? 0 : 1500); // short backoff before the second try
+        return true;
+      }
+      function waitForTablet(n) {
+        setTimeout(function () {
+          var f = getFully();
+          try { if (n === 0 && f && typeof f.bringToForeground === "function" && !(typeof f.isInForeground === "function" && f.isInForeground())) f.bringToForeground(); } catch (e) { /* ignore */ }
+          if (stale()) return;
+          api("GET", "/me/player/devices", undefined, function (err, d) {
+            if (stale()) return;
+            if (err) { spotify.onCommandError(err, true); return; }
+            var dev = pickTablet(d && d.devices);
+            if (!dev) {
+              if (n + 1 < DEVICE_POLLS) waitForTablet(n + 1);
+              else if (!wakeLater()) giveUp();
+              return;
+            }
+            // make the tablet the active device (paused), then start again from the first way on it
+            api("PUT", "/me/player", { device_ids: [dev.id], play: false }, function (e2) {
+              if (e2 && !isGone(e2)) { spotify.onCommandError(e2, true); return; }
+              step = 0;
+              setTimeout(function () { send(dev.id); }, 500);
+            });
+          });
+        }, n === 0 ? WAKE_MS : 1000);
       }
       function isGone(err) { return err.status === 404 || /NO_ACTIVE_DEVICE|not found/i.test(err.message + " " + err.reason); }
       function viaDevice() {
         api("GET", "/me/player/devices", undefined, function (err, d) {
           if (err) { spotify.onCommandError(err, true); return; }
-          var dev = pickDevice(d && d.devices);
-          if (!dev) { spotify.setMessage("No active Spotify device. Open Spotify on the tablet, or pick a device.", true); noDevice(); return; }
+          var list = (d && d.devices) || [], act = null;
+          each(list, function (x) { if (x && x.is_active && x.id && !x.is_restricted) act = x; });
+          // no active device and the tablet's app isn't listed: it's asleep - wake it (Fully) rather than
+          // starting on some other speaker
+          if (!act && !pickTablet(list) && wakeLater()) return;
+          var dev = pickDevice(list);
+          if (!dev) {
+            spotify.setMessage("No active Spotify device. Open Spotify on the tablet, or pick a device.", true); noDevice(); return;
+          }
           send(dev.id);
         });
       }
       var go = function () { if (hasActive()) send(lastState.device.id); else viaDevice(); };
-      if (shuffle && hasActive()) { spotify.setShuffle(true, go); shuffle = false; } else go();
+      if (shuffle && hasActive()) { shuffled = true; spotify.setShuffle(true, go); } else go();
     }
     function playContext(uri, offset, shuffle) {
       var data = { context_uri: uri };
       if (offset) data.offset = offset;
       startPlayback(data, shuffle);
     }
-    function playUris(uris, shuffle) { startPlayback({ uris: uris }, !!shuffle); }
-    // Liked Songs: the Web API doesn't take the user's collection as a context_uri with an offset, so this plays
-    // the playable songs from the tapped one on, as a list of URIs (max 50; local files / unavailable ones skipped).
+    function ctxAt(ctx, uri) { return { context_uri: ctx, offset: { uri: uri } }; }
+    // One song (Recent, search): in the context it came from if any, else its album, else on its own.
+    function playTrack(o, ctx) {
+      if (!playable(o)) { cantPlay(o); return; }
+      var plan = [];
+      if (ctx && /^spotify:(album|playlist):|^spotify:user:[^:]+:collection$/.test(ctx)) plan.push(ctxAt(ctx, o.uri));
+      if (o.album && o.album !== ctx) plan.push(ctxAt(o.album, o.uri));
+      plan.push({ uris: [o.uri] });
+      startPlayback(plan, false);
+    }
+    // A podcast episode: in its show (so the next episode follows) if we know it, else on its own.
+    function playEpisode(ep, showUri) {
+      var show = showUri || (ep.raw && ep.raw.show && ep.raw.show.uri);
+      startPlayback(show ? [ctxAt(show, ep.uri), { uris: [ep.uri] }] : { uris: [ep.uri] }, false);
+    }
+    // Liked Songs: as the user's collection context (spotify:user:<id>:collection) starting at the tapped song;
+    // if Spotify refuses that or it doesn't start, the playable songs from there on as a URI list (max 50;
+    // local files / unavailable ones skipped).
     var MAX_URIS = 50;
     function playList(items, i, shuffle) {
       var first = items[i];
@@ -3144,7 +3287,17 @@
       var uris = [];
       for (var k = Math.max(0, i); k < items.length && uris.length < MAX_URIS; k++) if (playable(items[k]) && items[k].type === "track") uris.push(items[k].uri);
       if (!uris.length) { spotify.setMessage("None of these songs can be played here.", true); return; }
-      playUris(uris, shuffle);
+      withMe(function (id) {
+        var plan = [];
+        if (id) plan.push(ctxAt("spotify:user:" + id + ":collection", uris[0]));
+        plan.push({ uris: uris });
+        startPlayback(plan, shuffle);
+      });
+    }
+    // the signed-in user's id (for the collection context); fetched once
+    function withMe(cb) {
+      if (meId) { cb(meId); return; }
+      api("GET", "/me", undefined, function (err, d) { if (!err && d && d.id) meId = d.id; cb(meId); });
     }
 
     /* ---------- devices + up next (a sheet over the browse area) ---------- */
@@ -3205,6 +3358,11 @@
           b.addEventListener("click", function () { transfer(dev); });
           box.appendChild(b);
         });
+        // the tablet's app may be asleep (not listed, or listed but not starting): a way to open it
+        var o = el("button", "spb-fallback spb-open-app2", "Open Spotify app on this tablet");
+        o.id = "spb-open-app2";
+        o.addEventListener("click", function () { openSpotifyApp(""); setTimeout(function () { if (sheet === "devices") loadDevices(); }, 4000); });
+        box.appendChild(o);
       });
     }
     function transfer(dev) {
@@ -3632,7 +3790,7 @@
       window.location.href = intentWithFallback();
     }
     function open() {
-      var f = window.fully;
+      var f = getFully();
       if (f && typeof f.startIntent === "function") {
         try { f.startIntent(INTENT); return; } catch (e) { /* fall through to the how-to */ }
       }
