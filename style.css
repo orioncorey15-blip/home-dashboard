@@ -1418,4 +1418,8 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
   .cal-title { font-size: 30px; }
   .cal-nav { -webkit-flex: 1 1 100%; flex: 1 1 100%; margin: 8px 0 0; }
   .cal-day.today .cal-date::after { content: none; } /* no room for "Today" next to the date; the cell stays highlighted */
+  .spb-tabs { -webkit-flex-wrap: wrap; flex-wrap: wrap; overflow: visible; }
+  .spb-tab { padding: 0 8px; margin: 0 6px 6px 0; font-size: 13px; }
+  .spb-tab:last-child { margin-right: 0; }
+  .spb-search { -webkit-flex: 1 1 150px; flex: 1 1 150px; min-width: 0; }
 }
