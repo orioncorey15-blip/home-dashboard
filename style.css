@@ -770,6 +770,12 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .sp-menu-item { display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-radius: 10px; background: transparent; color: #ffb3b3; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
 .sp-menu-item:active { background: rgba(255, 255, 255, 0.08); }
 
+/* Spotify device that can't take volume commands (and no Fully Kiosk JS interface): no dead slider, a short note */
+.vol-note { display: none; }
+.media-volume.vol-off .vol-body, .media-volume.vol-off .mute-btn { display: none; }
+.media-volume.vol-off { -webkit-justify-content: center; justify-content: center; }
+.media-volume.vol-off .vol-note { display: block; margin-top: 14px; padding: 0 4px; font-size: 13px; line-height: 1.4; text-align: center; color: rgba(228, 234, 250, 0.7); }
+
 /* YouTube */
 .yt-bar { display: -webkit-flex; display: flex; width: 100%; }
 .yt-bar > * + * { margin-left: 10px; }
@@ -1309,3 +1315,11 @@ body.sp-full .sp-connected .sp-full-close svg { width: 26px; height: 26px; }
   body.sp-full .sp-connected .sp-modes { display: -webkit-flex; display: flex; }
 }
 .sp-message.sticky { cursor: pointer; }
+
+/* full screen: no volume slider when the device can't take volume commands */
+.sp-full-vol-note { display: none; }
+body.sp-full .sp-connected .sp-full-vol.vol-off { display: none; }
+body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: block; min-height: 44px; line-height: 44px; font-size: 13px; color: rgba(228, 234, 250, 0.64); }
+
+/* songs Spotify can't play (local files, not available in this country) */
+.spb-row.unplayable { opacity: 0.45; }

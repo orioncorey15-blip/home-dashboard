@@ -1924,6 +1924,7 @@
       toggleClass(b, "active", b.getAttribute("data-source") === activeSource);
     });
     if (activeSource === "youtube") youtube.onShow();
+    if (spotify && spotify.paintVolumeMode) spotify.paintVolumeMode();
     updateNowPlaying();
   }
 
@@ -2307,6 +2308,8 @@
     function errorText(err) {
       var why = (err.message || "") + " " + (err.reason || "");
       if (err.status === 403 && /premium/i.test(why)) return "Controls need Spotify Premium";
+      if (err.status === 403 && /UNPLAYABLE|restriction|not available|region/i.test(why)) return "Spotify can't play that here (" + (err.message || "not available") + ").";
+      if (err.status === 400 && /uri|local/i.test(why)) return "Spotify couldn't play that song (" + (err.message || "bad request") + ").";
       if (err.status === 404 || /NO_ACTIVE_DEVICE/.test(why)) return "No active Spotify device. Open Spotify on the tablet, or pick a device.";
       if (err.status === 429) return "Spotify is busy" + (err.retryAfter ? ", try again in " + Math.ceil(err.retryAfter) + " s." : ", try again in a moment.");
       if (err.status === 401) return "Spotify sign-in expired. Disconnect and connect again.";
@@ -2315,11 +2318,12 @@
       return "Spotify: " + err.message;
     }
     function isNoDevice(err) { return !!err && (err.status === 404 || /NO_ACTIVE_DEVICE/.test(err.message + " " + err.reason)); }
-    function onCommandError(err) {
+    // sticky: keep it up through the 5 s polls (play errors, "No active device") until the user acts or taps it
+    function onCommandError(err, sticky) {
       if (!err) { setMessage(""); return; }
       // "No active device" stays up until a command works, a device is picked, or the message is tapped
       var nd = isNoDevice(err);
-      setMessage(errorText(err), nd);
+      setMessage(errorText(err), nd || !!sticky);
       if (nd && spBrowse) spBrowse.noDevice();
     }
 
@@ -2352,11 +2356,67 @@
       });
     }
 
+    /* ---- volume ----
+       Spotify's Android app usually reports device.supports_volume = false, or answers PUT /me/player/volume
+       with 403 VOLUME_CONTROL_DISALLOW. So when Spotify plays on this tablet, the slider sets Android's music
+       volume (stream 3) through Fully Kiosk's JavaScript Interface: fully.setAudioVolume(percent, 3).
+       That needs Fully Kiosk PLUS with Settings > Advanced Web Settings > Enable JavaScript Interface turned on;
+       without it window.fully (or fully.setAudioVolume) is missing and we fall back to the Web API.
+       Other devices (speakers, TVs) use the Web API when they support volume; if nothing can set the volume,
+       the slider is hidden and a short note says to use the tablet's volume buttons. */
+    var MUSIC_STREAM = 3;
+    var volBlocked = {}; // device id -> true after a 403 VOLUME_CONTROL_DISALLOW
+    function fullyVolume() { var f = window.fully; return !!(f && typeof f.setAudioVolume === "function"); }
+    function isThisTablet(dev) {
+      if (!dev) return true;
+      var want = String(CFG.SPOTIFY_DEVICE_NAME || "").toLowerCase();
+      if (want) return String(dev.name || "").toLowerCase().indexOf(want) !== -1;
+      return /tablet|smartphone/i.test(String(dev.type || ""));
+    }
+    // (a device's id can be null in Spotify's answer; then the volume goes to the active device without device_id)
+    function devKey(dev) { return (dev && (dev.id || dev.name)) || "?"; }
+    function apiVolumeOk(dev) { return !!(dev && dev.supports_volume !== false && !volBlocked[devKey(dev)]); }
+    // "fully": the tablet's media volume, "api": Spotify Connect volume, "none": can't be set from here
+    function volumeMode() {
+      var dev = state && state.device;
+      if (fullyVolume() && isThisTablet(dev)) return "fully";
+      if (!dev || apiVolumeOk(dev)) return "api";
+      return "none";
+    }
+    function readFullyVolume() {
+      try {
+        var f = window.fully;
+        if (f && typeof f.getAudioVolume === "function") {
+          var n = Number(f.getAudioVolume(MUSIC_STREAM));
+          if (!isNaN(n) && n >= 0) return Math.max(0, Math.min(100, Math.round(n)));
+        }
+      } catch (e) { /* not available */ }
+      return null;
+    }
+    function paintVolumeMode() {
+      var off = activeSource === "spotify" && connected() && volumeMode() === "none";
+      toggleClass(document.querySelector(".media-volume"), "vol-off", off);
+      toggleClass($("sp-full-vol-wrap"), "vol-off", off);
+    }
     function setVolume(v) {
+      var mode = volumeMode();
+      if (mode === "fully") {
+        try { window.fully.setAudioVolume(Math.round(v), MUSIC_STREAM); } catch (e) { setMessage("Couldn't change the tablet's volume."); }
+        return;
+      }
+      var dev = state && state.device;
+      if (mode !== "api" || !dev) return; // nothing playing: nothing to set
       clearTimeout(volTimer);
       var mine = volTimer = setTimeout(function () {
-        api("PUT", "/me/player/volume?volume_percent=" + Math.round(v), undefined, function (err) {
+        api("PUT", "/me/player/volume?volume_percent=" + Math.round(v) + (dev.id ? "&device_id=" + encodeURIComponent(dev.id) : ""), undefined, function (err) {
           if (volTimer === mine) volTimer = null; // sent: the slider follows the speaker again (e.g. changed on a phone)
+          if (err && err.status === 403 && /VOLUME_CONTROL_DISALLOW|volume/i.test(err.message + " " + err.reason)) {
+            // this device doesn't take volume commands: switch to the tablet volume, or hide the slider
+            volBlocked[devKey(dev)] = true;
+            paintVolumeMode();
+            if (volumeMode() === "fully") setVolume(v);
+            return;
+          }
           onCommandError(err);
         });
       }, 400);
@@ -2456,11 +2516,13 @@
       if ($("sp-watch")) $("sp-watch").style.display = isVideoEpisode(item) ? "" : "none";
       renderProgress();
       var dev = state && state.device;
-      if (dev && typeof dev.volume_percent === "number" && volumeSlider && activeSource === "spotify" &&
-          !volTimer && document.activeElement !== volumeSlider) {
-        // keep the slider in step with the speaker (unless the user is dragging it)
-        volumeSlider.value = dev.volume_percent;
-        paintVolume();
+      paintVolumeMode();
+      if (volumeSlider && activeSource === "spotify" && !volTimer && document.activeElement !== volumeSlider) {
+        // keep the slider in step with the tablet / speaker (unless the user is dragging it)
+        var vm = volumeMode(), lvl = null;
+        if (vm === "fully") lvl = readFullyVolume();
+        else if (vm === "api" && dev && typeof dev.volume_percent === "number") lvl = dev.volume_percent;
+        if (lvl !== null) { volumeSlider.value = lvl; paintVolume(); }
       }
       updateNowPlaying();
       tick();
@@ -2577,6 +2639,7 @@
 
     return {
       init: init, connected: connected, command: command, togglePlay: togglePlay, setVolume: setVolume,
+      volumeMode: volumeMode, paintVolumeMode: paintVolumeMode,
       api: api, errorText: errorText, onCommandError: onCommandError, setMessage: setMessage, setShuffle: setShuffle,
       setFull: setFull, isVideoEpisode: isVideoEpisode, getState: function () { return state; },
       soon: function (ms) { schedulePoll(ms || 700); },
@@ -2630,7 +2693,8 @@
     var API = "https://api.spotify.com/v1";
     var TABS = {
       playlists: { path: "/me/playlists?limit=30", layout: "grid", empty: "No playlists yet." },
-      liked: { path: "/me/tracks?limit=50", layout: "rows", empty: "No liked songs yet." },
+      // market=from_token: Spotify then marks songs that can't play in this country (is_playable: false)
+      liked: { path: "/me/tracks?limit=50&market=from_token", layout: "rows", empty: "No liked songs yet." },
       recent: { path: "/me/player/recently-played?limit=50", layout: "rows", empty: "Nothing played recently." },
       albums: { path: "/me/albums?limit=30", layout: "grid", empty: "No saved albums." },
       shows: { path: "/me/shows?limit=30", layout: "grid", empty: "No saved podcasts." }
@@ -2735,7 +2799,7 @@
       return b;
     }
     function row(o, i, onTap) {
-      var b = el(onTap ? "button" : "div", "spb-row" + (onTap ? "" : " static"));
+      var b = el(onTap ? "button" : "div", "spb-row" + (onTap ? "" : " static") + (playable(o) ? "" : " unplayable"));
       b.setAttribute("data-uri", o.uri || "");
       b.setAttribute("data-index", String(i));
       if (o.img) b.appendChild(cover(o)); else b.appendChild(el("div", "spb-num", String(i + 1)));
@@ -2751,6 +2815,16 @@
       if (onTap) b.addEventListener("click", function () { onTap(o, i); });
       return b;
     }
+    // local files and songs not available in this country can't be started through the Web API
+    function playable(o) {
+      if (!o || !/^spotify:(track|episode):[A-Za-z0-9]+$/.test(o.uri || "")) return o && (o.type !== "track" && o.type !== "episode");
+      return !(o.raw && (o.raw.is_local || o.raw.is_playable === false));
+    }
+    function cantPlay(o) {
+      var local = o && o.raw && o.raw.is_local;
+      spotify.setMessage(local ? "That song is a local file on another device, so Spotify can't play it here." :
+        "Spotify can't play that song here (not available in your country).", true);
+    }
     function markPlaying() {
       var cur = lastState && lastState.item && lastState.item.uri;
       each(body ? body.querySelectorAll(".spb-row") : [], function (r) { toggleClass(r, "playing", !!cur && r.getAttribute("data-uri") === cur); });
@@ -2760,27 +2834,30 @@
       head.innerHTML = "";
       if (!view || !view.title) { head.style.display = "none"; return; }
       head.style.display = "";
-      var back = el("button", "spb-back");
-      back.setAttribute("aria-label", "Back");
-      back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>';
-      back.addEventListener("click", goBack);
-      head.appendChild(back);
+      if (view.kind !== "tab") {
+        var back = el("button", "spb-back");
+        back.setAttribute("aria-label", "Back");
+        back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>';
+        back.addEventListener("click", goBack);
+        head.appendChild(back);
+      }
       if (view.img !== undefined) head.appendChild(cover({ img: view.img }, view.round));
       var t = el("div", "spb-head-text");
       t.appendChild(el("div", "spb-head-title", view.title));
       if (view.sub) t.appendChild(el("div", "spb-sub", view.sub));
       head.appendChild(t);
-      if (view.uri && view.playable !== false) {
+      if ((view.uri || view.playAll) && view.playable !== false) {
+        var hv = view;
         var p = el("button", "spb-play");
         p.id = "spb-play";
         p.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><span>Play</span>';
-        p.addEventListener("click", function () { playContext(view.uri, null, false); });
+        p.addEventListener("click", function () { if (hv.playAll) hv.playAll(false); else playContext(hv.uri, null, false); });
         head.appendChild(p);
         var sh = el("button", "spb-shuffle");
         sh.id = "spb-shuffle";
         sh.setAttribute("aria-label", "Shuffle play");
         sh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3.5 7h3.2c1.6 0 3 .8 3.9 2.1l3.8 5.8c.9 1.3 2.3 2.1 3.9 2.1h2.2M3.5 17h3.2c1.6 0 3-.8 3.9-2.1M14.4 9.1c.9-1.3 2.3-2.1 3.9-2.1h2.2M18 4.5 20.5 7 18 9.5M18 14.5l2.5 2.5-2.5 2.5"/></svg>';
-        sh.addEventListener("click", function () { playContext(view.uri, null, true); });
+        sh.addEventListener("click", function () { if (hv.playAll) hv.playAll(true); else playContext(hv.uri, null, true); });
         head.appendChild(sh);
       }
       if (view.watch) {
@@ -2873,11 +2950,18 @@
       each(document.querySelectorAll(".spb-tab"), function (b) { toggleClass(b, "active", b.getAttribute("data-tab") === t); b.setAttribute("aria-selected", b.getAttribute("data-tab") === t ? "true" : "false"); });
       var T = TABS[t];
       var v = { kind: "tab", tab: t, path: T.path, layout: T.layout, empty: T.empty };
-      if (t === "liked") v.tap = function (o, i) { playList(v.items, i); };
+      if (t === "liked") {
+        // Liked Songs has no context URI the Web API accepts: play a list of song URIs (see playList)
+        v.title = "Liked Songs"; v.sub = "Your liked songs";
+        v.tap = function (o, i) { playList(v.items, i, false); };
+        v.playAll = function (shuffle) { playList(v.items, 0, shuffle); };
+      }
       if (t === "recent") v.tap = function (o) {
+        // Spotify only takes an offset for albums and playlists; anything else plays just that song
         var ctx = o.raw && o.raw.__ctx;
-        if (ctx && /^spotify:(album|playlist|artist|show):/.test(ctx)) playContext(ctx, { uri: o.uri }, false);
-        else playUris([o.uri], 0);
+        if (!playable(o)) { cantPlay(o); return; }
+        if (ctx && /^spotify:(album|playlist):/.test(ctx)) playContext(ctx, { uri: o.uri }, false);
+        else playUris([o.uri]);
       };
       if (t === "recent") v.pick = function (d) {
         // remember where each song was played from, so it can play on in that playlist/album
@@ -2914,7 +2998,8 @@
           path: "/shows/" + encodeURIComponent(o.id) + "/episodes?limit=30", empty: "No episodes." };
         s.tap = function (ep) {
           if (ep.video) { showEpisode(ep); return; }
-          playContext(o.uri, { uri: ep.uri }, false);
+          // (a show context doesn't take an offset; play the episode itself)
+          playUris([ep.uri]);
         };
         show(s, true);
       } else if (o.type === "artist") {
@@ -2922,16 +3007,17 @@
         show({ kind: "artist", uri: o.uri, title: o.name, sub: "Artist", img: o.img, round: true, layout: "grid",
           path: "/artists/" + encodeURIComponent(o.id) + "/albums?include_groups=album,single&limit=30", empty: "No albums." }, true);
       } else if (o.type === "track") {
-        if (o.album) playContext(o.album, { uri: o.uri }, false); else playUris([o.uri], 0);
+        if (!playable(o)) { cantPlay(o); return; }
+        if (o.album) playContext(o.album, { uri: o.uri }, false); else playUris([o.uri]);
       } else if (o.type === "episode") {
-        if (o.video) showEpisode(o); else playUris([o.uri], 0);
+        if (o.video) showEpisode(o); else playUris([o.uri]);
       }
     }
     // video podcast episode: can play the audio here, or watch it in the Spotify app
     function showEpisode(ep) {
       if (view) view.scroll = body.scrollTop;
       var v = { kind: "episode", uri: ep.uri, title: ep.name, sub: ep.sub, img: ep.img, layout: "rows", items: [ep], watch: true,
-        tap: function () { playUris([ep.uri], 0); } };
+        tap: function () { playUris([ep.uri]); } };
       seq++; stack.push(view); view = v; loading = false; paint();
     }
 
@@ -2990,42 +3076,61 @@
     }
     function hasActive() { return !!(lastState && lastState.device && lastState.device.id && lastState.device.is_active !== false); }
 
-    // body: { context_uri, offset } or { uris, offset }. Plays on the active device; with none, picks one
-    // (the tablet's own Spotify app by default) and starts there; with no device at all, shows how to fix it.
+    // body: { context_uri, offset } or { uris }. Always names the device (device_id): the active one, else
+    // the best available (the tablet's own Spotify app by default); with no device at all, shows how to fix it.
+    // Every failure stays on screen (sticky) until the user acts, so a tap never looks dead.
     function startPlayback(data, shuffle) {
+      var tries = 0;
       function send(deviceId) {
-        var path = "/me/player/play" + (deviceId ? "?device_id=" + encodeURIComponent(deviceId) : "");
-        api("PUT", path, data, function (err) {
-          if (err && !deviceId && (err.status === 404 || /NO_ACTIVE_DEVICE/.test(err.message + " " + err.reason))) { viaDevice(); return; }
-          if (err) { spotify.onCommandError(err); return; }
+        var path = "/me/player/play?device_id=" + encodeURIComponent(deviceId);
+        api("PUT", path, data, function (err, d, status) {
+          if (err && isGone(err) && tries === 0) { tries++; viaDevice(); return; } // the "active" device went away
+          if (err) { spotify.onCommandError(err, true); return; }
+          // 202: Spotify accepted it but the device isn't ready yet; try once more
+          if (status === 202 && tries < 2) { tries++; setTimeout(function () { send(deviceId); }, 1500); return; }
           spotify.setMessage("");
-          // a device that was just woken up: shuffle once it's playing
-          if (shuffle && deviceId) spotify.setShuffle(true);
+          if (shuffle) spotify.setShuffle(true);
           spotify.soon(700);
+          check(deviceId);
         });
       }
+      // a 204 that didn't start anything (seen with sleeping phone/tablet apps): say so instead of nothing
+      function check(deviceId) {
+        setTimeout(function () {
+          api("GET", "/me/player?additional_types=episode", undefined, function (err, st) {
+            if (err || (st && st.is_playing && st.item)) return;
+            spotify.setMessage("Spotify didn't start playing. Open Spotify on the tablet, then tap the song again.", true);
+          });
+        }, 3500);
+      }
+      function isGone(err) { return err.status === 404 || /NO_ACTIVE_DEVICE|not found/i.test(err.message + " " + err.reason); }
       function viaDevice() {
         api("GET", "/me/player/devices", undefined, function (err, d) {
-          if (err) { spotify.onCommandError(err); return; }
+          if (err) { spotify.onCommandError(err, true); return; }
           var dev = pickDevice(d && d.devices);
           if (!dev) { spotify.setMessage("No active Spotify device. Open Spotify on the tablet, or pick a device.", true); noDevice(); return; }
           send(dev.id);
         });
       }
-      if (!hasActive()) { viaDevice(); return; }
-      if (shuffle) spotify.setShuffle(true, function () { send(null); }); else send(null);
+      var go = function () { if (hasActive()) send(lastState.device.id); else viaDevice(); };
+      if (shuffle && hasActive()) { spotify.setShuffle(true, go); shuffle = false; } else go();
     }
     function playContext(uri, offset, shuffle) {
       var data = { context_uri: uri };
       if (offset) data.offset = offset;
       startPlayback(data, shuffle);
     }
-    function playUris(uris, i) { startPlayback({ uris: uris, offset: { position: i || 0 } }, false); }
-    function playList(items, i) {
-      // Liked Songs has no context URI: play the loaded songs from the tapped one (up to 100 ahead)
-      var uris = [], start = Math.max(0, i);
-      for (var k = start; k < items.length && uris.length < 100; k++) if (items[k] && items[k].uri) uris.push(items[k].uri);
-      playUris(uris, 0);
+    function playUris(uris, shuffle) { startPlayback({ uris: uris }, !!shuffle); }
+    // Liked Songs: the Web API doesn't take the user's collection as a context_uri with an offset, so this plays
+    // the playable songs from the tapped one on, as a list of URIs (max 50; local files / unavailable ones skipped).
+    var MAX_URIS = 50;
+    function playList(items, i, shuffle) {
+      var first = items[i];
+      if (first && !playable(first)) { cantPlay(first); return; }
+      var uris = [];
+      for (var k = Math.max(0, i); k < items.length && uris.length < MAX_URIS; k++) if (playable(items[k]) && items[k].type === "track") uris.push(items[k].uri);
+      if (!uris.length) { spotify.setMessage("None of these songs can be played here.", true); return; }
+      playUris(uris, shuffle);
     }
 
     /* ---------- devices + up next (a sheet over the browse area) ---------- */
