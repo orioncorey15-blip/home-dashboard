@@ -1372,3 +1372,20 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
 
 /* songs Spotify can't play (local files, not available in this country) */
 .spb-row.unplayable { opacity: 0.45; }
+
+/* Compact screens (Galaxy Tab A7 Lite ~1006x601, 1024x600): Spotify bar controls keep their smaller look
+   but get an invisible 44 px touch area. The tab strip scrolls sideways (which clips), so it gets 4 px of
+   room above and below that its negative margin takes back. The search field can't have a ::before, so its
+   44 px box draws a 36 px pill inside a transparent border. */
+@media (max-height: 650px) {
+  .spb-tabs { padding: 4px 0; margin: -4px 0; }
+  .spb-tab, .spb-tool { position: relative; }
+  .spb-tab::before, .spb-tool::before {
+    content: ""; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; min-width: 44px; min-height: 44px;
+    -webkit-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+  }
+  #spb-search { height: 44px; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); padding: 0 2px 0 34px; }
+  #spb-search:focus { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(30, 215, 96, 0.6); }
+  .spb-search { margin-top: -4px; margin-bottom: -4px; }
+}
