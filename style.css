@@ -1385,7 +1385,22 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
     -webkit-transform: translate(-50%, -50%);
             transform: translate(-50%, -50%);
   }
-  #spb-search { height: 44px; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); padding: 0 2px 0 34px; }
+  #spb-search { height: 44px; border: 4px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); padding: 0 7px 0 39px; }
+  .spb-search svg { left: 16px; }
   #spb-search:focus { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(30, 215, 96, 0.6); }
-  .spb-search { margin-top: -4px; margin-bottom: -4px; }
+  .spb-search { margin: -4px -4px -4px 2px; -webkit-flex-basis: 158px; flex-basis: 158px; min-width: 118px; }
+}
+
+/* Compact screens: invisible 44 px touch areas for the 40 px player, radar and calendar buttons. The View
+   Calendar / View Full Radar areas are shifted so the card edge doesn't clip them. */
+@media (max-height: 650px) {
+  .icon-btn, .np-btn, .radar-tool, .round-btn, .cal-nav .pill-btn { position: relative; }
+  .icon-btn::before, .np-btn::before, .radar-tool::before, .round-btn::before, .cal-nav .pill-btn::before {
+    content: ""; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; min-width: 44px; min-height: 44px;
+    -webkit-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+  }
+  .card-link::before { top: auto; bottom: -2px; -webkit-transform: translateX(-50%); transform: translateX(-50%); }
+  .radar-expand::before { top: -7px; -webkit-transform: translateX(-50%); transform: translateX(-50%); }
+  #cal-home::before { left: 0; -webkit-transform: translateY(-50%); transform: translateY(-50%); } /* page edge on its left */
 }
