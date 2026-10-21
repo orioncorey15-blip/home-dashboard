@@ -1099,15 +1099,15 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .spb-bar { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding-right: 48px; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .spb-tabs { display: -webkit-flex; display: flex; -webkit-flex: 1; flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .spb-tabs::-webkit-scrollbar { display: none; }
-.spb-tab { -webkit-flex-shrink: 0; flex-shrink: 0; height: 40px; padding: 0 16px; margin-right: 8px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08);
+.spb-tab { -webkit-flex-shrink: 0; flex-shrink: 0; height: 44px; padding: 0 16px; margin-right: 8px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05); color: rgba(228, 234, 250, 0.78); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .spb-tab.active { background: rgba(30, 215, 96, 0.16); border-color: rgba(30, 215, 96, 0.55); color: #fff; }
 .spb-search { position: relative; -webkit-flex: 0 1 230px; flex: 0 1 230px; min-width: 150px; margin-left: 6px; }
 .spb-search svg { position: absolute; left: 12px; top: 50%; width: 18px; height: 18px; margin-top: -9px; color: rgba(228, 234, 250, 0.55); }
-#spb-search { width: 100%; height: 40px; padding: 0 12px 0 38px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1);
+#spb-search { width: 100%; height: 44px; padding: 0 12px 0 38px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.22); font-size: 14px; outline: none; -webkit-appearance: none; appearance: none; }
 #spb-search:focus { border-color: rgba(30, 215, 96, 0.6); }
-.spb-tool { -webkit-flex-shrink: 0; flex-shrink: 0; width: 40px; height: 40px; margin-left: 8px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.08);
+.spb-tool { -webkit-flex-shrink: 0; flex-shrink: 0; width: 44px; height: 44px; margin-left: 8px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05); color: rgba(228, 234, 250, 0.85); cursor: pointer; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; padding: 0; }
 .spb-tool svg { width: 20px; height: 20px; }
 .spb-tool.active { background: rgba(30, 215, 96, 0.16); border-color: rgba(30, 215, 96, 0.55); color: #1ed760; }
@@ -1160,7 +1160,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 .spb-empty-title { font-size: 18px; font-weight: 600; }
 .spb-empty-sub { font-size: 14px; color: rgba(228, 234, 250, 0.64); margin-top: 6px; max-width: 420px; line-height: 1.45; }
 .spb-retry, .spb-open-app { margin-top: 16px; }
-.spb-fallback { margin-top: 12px; font-size: 13px; color: rgba(228, 234, 250, 0.64); }
+.spb-fallback { display: inline-block; min-height: 44px; line-height: 44px; padding: 0 8px; margin-top: 4px; font-size: 13px; color: rgba(228, 234, 250, 0.64); }
 
 /* devices / up next sheet */
 .spb-sheet { position: absolute; top: 52px; right: 0; bottom: 0; width: 380px; max-width: 100%; z-index: 15; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
@@ -1235,7 +1235,7 @@ body.sp-full .sp-connected .sp-modes .repeat-btn svg { margin-right: 8px; }
 body.sp-full .sp-connected .sp-modes .repeat-btn span { display: inline; }
 body.sp-full .sp-connected .sp-modes .repeat-btn .repeat-state { position: static; display: inline; margin-left: 8px; padding: 2px 8px; font-size: 11px; line-height: normal; }
 body.sp-full .sp-connected .sp-full-vol { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%; max-width: 420px; color: rgba(228, 234, 250, 0.7); }
-#sp-full-vol { -webkit-flex: 1; flex: 1; min-width: 0; height: 40px; margin: 0 12px; -webkit-appearance: none; appearance: none; background-color: transparent;
+#sp-full-vol { -webkit-flex: 1; flex: 1; min-width: 0; height: 44px; margin: 0 12px; -webkit-appearance: none; appearance: none; background-color: transparent;
   background-image: -webkit-linear-gradient(left, #e9a54a, #f6c77a), -webkit-linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
   background-image: linear-gradient(90deg, #e9a54a, #f6c77a), linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
   background-repeat: no-repeat, no-repeat; background-position: 0 50%, 0 50%; background-size: 60% 8px, 100% 8px; border-radius: 4px; outline: none; cursor: pointer; }
