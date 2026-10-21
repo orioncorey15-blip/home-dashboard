@@ -831,6 +831,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 
 /* =====================  PORTRAIT TABLET  ===================== */
 @media (orientation: portrait) {
+  .cal-day.today .cal-date::after { margin-left: 4px; letter-spacing: 0.02em; } /* "20 TODAY" fits the narrower day cell */
   #home-time { font-size: 112px; }
   .home-hero { padding: 18px 0 26px; }
   .home-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "weather today" "photo photo"; }
