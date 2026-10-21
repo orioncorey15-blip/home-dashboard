@@ -3313,7 +3313,9 @@
           });
         }, n === 0 ? WAKE_MS : 1000);
       }
-      function isGone(err) { return err.status === 404 || /NO_ACTIVE_DEVICE|not found/i.test(err.message + " " + err.reason); }
+      // the device went away ("No active device found", "Device not found"); a plain 404 "Not found." is Spotify
+      // refusing the context (e.g. the Liked Songs collection), which the next way should handle instead
+      function isGone(err) { var why = (err.message || "") + " " + (err.reason || ""); return /NO_ACTIVE_DEVICE|device/i.test(why) || (err.status === 404 && !/\S/.test(why)); }
       function viaDevice() {
         api("GET", "/me/player/devices", undefined, function (err, d) {
           if (err) { spotify.onCommandError(err, true); return; }
