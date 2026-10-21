@@ -193,6 +193,81 @@
   var homeGrid = document.querySelector(".home-grid");
   if (homeGrid) homeGrid.addEventListener("click", function () { toggleClass($("sidebar"), "open", false); });
 
+  /* ---- nav rail auto-hide ----
+     After NAV_HIDE_SECONDS (default 8) with no touch/pointer activity the rail slides out (transform, ~250 ms),
+     then one class change takes it out of the layout so the content gets the freed width. A thin line at the
+     left edge (touch area 44x88, a few px in: a swipe from the very edge opens Fully Kiosk's menu) slides it back
+     in over the content. While it's open, a nav tap navigates and restarts the timer, a tap outside only closes
+     it (a transparent scrim takes that tap), and NAV_HIDE_SECONDS of quiet hides it again.
+     NAV_AUTOHIDE: false = the rail is always shown. Phones (bottom tab bar) are left alone. */
+  var navHide = (function () {
+    var on = CFG.NAV_AUTOHIDE !== false;
+    var secs = Number(CFG.NAV_HIDE_SECONDS);
+    var MS = (secs > 0 ? secs : 8) * 1000, SLIDE = 260;
+    var timer = null, slideT = null, state = "shown"; // shown | sliding | hidden | peek
+    var body = document.body, handle = $("nav-handle"), scrim = $("nav-scrim");
+    function phone() { return !!(window.matchMedia && window.matchMedia("(max-width: 600px)").matches); }
+    function relayout() {
+      // the content changed width: let the maps / Home / Media grids refit
+      try { var ev = document.createEvent("HTMLEvents"); ev.initEvent("resize", false, false); window.dispatchEvent(ev); } catch (e) { /* ignore */ }
+    }
+    function arm() {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      if (on && (state === "shown" || state === "peek")) timer = setTimeout(hide, MS);
+    }
+    function hide() {
+      timer = null;
+      if (phone()) { arm(); return; }
+      if (state === "peek") { state = "hidden"; toggleClass(body, "nav-peek", false); return; }
+      if (state !== "shown") return;
+      state = "sliding";
+      toggleClass(body, "nav-sliding", true);
+      slideT = setTimeout(function () {
+        slideT = null;
+        if (state !== "sliding") return;
+        state = "hidden";
+        // the rail is already off-screen: switch it out of the flow in one go (no transition on the way)
+        toggleClass(body, "nav-hidden", true);
+        toggleClass(body, "nav-sliding", false);
+        relayout();
+      }, SLIDE);
+    }
+    function reveal() {
+      if (state === "sliding") { // tapped mid-slide: just bring it back in place
+        if (slideT) clearTimeout(slideT);
+        slideT = null; state = "shown"; toggleClass(body, "nav-sliding", false); arm(); return;
+      }
+      if (state !== "hidden") { arm(); return; }
+      state = "peek";
+      toggleClass(body, "nav-peek", true);
+      arm();
+    }
+    function close() {
+      if (state !== "peek") return;
+      state = "hidden";
+      toggleClass(body, "nav-peek", false);
+      arm();
+    }
+    function activity() { if (state === "shown" || state === "peek") arm(); }
+    if (!on) return { arm: function () {}, state: function () { return "off"; } };
+    toggleClass(body, "nav-auto", true);
+    each(["touchstart", "mousedown", "pointerdown", "keydown", "wheel"], function (t) {
+      document.addEventListener(t, activity, true);
+    });
+    if (handle) handle.addEventListener("click", function (e) { if (e && e.stopPropagation) e.stopPropagation(); reveal(); });
+    if (scrim) {
+      // close on the touch itself and cancel the click that would follow, so nothing underneath gets it
+      scrim.addEventListener("touchstart", function (e) { if (e.cancelable) e.preventDefault(); close(); }, false);
+      scrim.addEventListener("mousedown", function (e) { if (e && e.preventDefault) e.preventDefault(); close(); }, false);
+      scrim.addEventListener("click", function (e) { if (e && e.stopPropagation) e.stopPropagation(); close(); }, false);
+    }
+    each(document.querySelectorAll(".nav-btn"), function (btn) { btn.addEventListener("click", arm); });
+    arm(); // the timer starts at page load
+    return { arm: arm, reveal: reveal, close: close, state: function () { return state; } };
+  })();
+  window.navHide = navHide;
+
   // Home: the now-playing art/title open the Media page; "View Calendar" opens the calendar.
   (function () {
     function openMedia(e) { if (e && e.stopPropagation) e.stopPropagation(); showPage("media"); }

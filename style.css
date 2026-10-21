@@ -152,6 +152,52 @@ body[data-page="photos"] #content { padding: 0; }
 @-webkit-keyframes page-in { from { opacity: 0; -webkit-transform: translateY(6px); } to { opacity: 1; -webkit-transform: none; } }
 @keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
+/* ----- Nav rail auto-hide (CONFIG.NAV_AUTOHIDE / NAV_HIDE_SECONDS) -----
+   body.nav-auto     the feature is on (the rail slides with transform only)
+   body.nav-sliding  the in-flow rail slides out (~250 ms) before the layout changes
+   body.nav-hidden   the rail is out of the flow, off-screen; the content takes the freed width (one layout change)
+   body.nav-peek     the rail slides back in over the content; a transparent scrim catches the tap outside it */
+body.nav-auto #sidebar { -webkit-transition: -webkit-transform 0.25s ease-out; transition: -webkit-transform 0.25s ease-out; transition: transform 0.25s ease-out; transition: transform 0.25s ease-out, -webkit-transform 0.25s ease-out; will-change: transform; }
+body.nav-sliding #sidebar { -webkit-transform: translateX(-100%); transform: translateX(-100%); }
+body.nav-hidden #sidebar {
+  position: fixed; top: 0; bottom: 0; left: 0; height: 100%; z-index: 350;
+  -webkit-transform: translateX(-100%);
+          transform: translateX(-100%); background: rgba(11, 16, 32, 0.97);
+  box-shadow: none;
+}
+body.nav-hidden.nav-peek #sidebar { -webkit-transform: translateX(0); transform: translateX(0); box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45); border-right-color: rgba(255, 255, 255, 0.1); }
+body.nav-hidden #header { left: 0; }
+body.nav-hidden.radar-full .weather-radar { left: 0; }
+
+/* tap outside the open rail: only closes it (never reaches what's underneath) */
+.nav-scrim { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 340; background: transparent; -webkit-tap-highlight-color: transparent; }
+body.nav-hidden.nav-peek .nav-scrim { display: block; }
+
+/* the handle: looks like a thin rounded line (4x48, ~25%), touch area 44x88; a few px in from the edge
+   (a swipe from the very edge opens Fully Kiosk's menu) */
+.nav-handle {
+  display: none; position: fixed; left: 4px; top: 50%; width: 44px; height: 88px; margin-top: -44px; z-index: 345;
+  padding: 0; border: none; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.nav-handle::before {
+  content: ""; position: absolute; left: 4px; top: 20px; width: 4px; height: 48px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.nav-handle:active::before { background: rgba(255, 255, 255, 0.45); }
+body.nav-hidden .nav-handle { display: block; }
+body.nav-hidden.nav-peek .nav-handle { display: none; }
+/* night mode dims everything ~66%: a little stronger so it stays findable, still subtle */
+body.night .nav-handle::before { background: rgba(255, 255, 255, 0.42); }
+body.sp-full .nav-handle { display: none; }
+
+/* phones keep the bottom tab bar; no auto-hide there */
+@media (max-width: 600px) {
+  body.nav-sliding #sidebar, body.nav-hidden #sidebar { position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: 68px; -webkit-transform: none; transform: none; }
+  body.nav-hidden .nav-handle, body.nav-hidden .nav-scrim { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) { body.nav-auto #sidebar { -webkit-transition: none; transition: none; } }
+
 /* =====================  HOME  ===================== */
 .home-wrap { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
 .home-hero { -webkit-flex-shrink: 0; flex-shrink: 0; text-align: center; padding: 2px 0 18px; }

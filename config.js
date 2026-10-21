@@ -23,6 +23,11 @@ var CONFIG = {
   NIGHT_MODE_START: 22,
   NIGHT_MODE_END: 6,
 
+  // Optional: hide the page buttons on the left after this many seconds without a touch.
+  // A thin line at the left edge brings them back. Set NAV_AUTOHIDE to false to always show them.
+  NAV_AUTOHIDE: true,
+  NAV_HIDE_SECONDS: 8,
+
   // Optional: reload the page once a day at this hour (0-23) to free memory.
   // Set to null to turn off.
   DAILY_RELOAD_HOUR: 3,
