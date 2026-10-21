@@ -2631,7 +2631,7 @@
     var view = null;          // what the body shows: { kind, path, layout, items, next, ... }
     var stack = [];           // views to go back to
     var seq = 0;              // ignores responses for views we've left
-    var loading = false, retryTimer = null, started = false, lastState = null, sheet = "";
+    var loading = false, retryTimer = null, started = false, lastState = null, sheet = "", meId = "";
     var body, head;
 
     function api(method, path, data, cb) { spotify.api(method, path, data, cb); }
@@ -2890,6 +2890,11 @@
         v.tap = function (t, i) { playContext(o.uri, { position: i }, false); };
         // Spotify only lists the songs of playlists you own or collaborate on (Feb 2026); others still play.
         v.on403 = function () { return msg("Spotify only lists the songs of playlists you made or collaborate on.", { sub: "Tap Play to listen to it anyway." }); };
+        var owner = o.raw && o.raw.owner && o.raw.owner.id;
+        if (meId && owner && owner !== meId && !(o.raw && o.raw.collaborative)) {
+          seq++; if (view) stack.push(view); view = v; v.items = []; v.error = v.on403(); loading = false; paint();
+          return;
+        }
         show(v, true);
       } else if (o.type === "album") {
         var a = { kind: "album", uri: o.uri, title: o.name, sub: o.sub, img: o.img, layout: "rows",
@@ -3109,8 +3114,13 @@
     /* ---------- wiring ---------- */
     function onState(st, connected) {
       lastState = st;
-      if (!connected) { started = false; closeSheet(); return; }
-      if (!started && body) { started = true; setTab(store.get("spb_tab") || "playlists"); }
+      if (!connected) { started = false; meId = ""; closeSheet(); return; }
+      if (!started && body) {
+        started = true;
+        setTab(store.get("spb_tab") || "playlists");
+        // who is signed in, so playlists by others don't ask for their (forbidden) song list
+        if (!meId) api("GET", "/me", undefined, function (err, d) { if (!err && d && d.id) meId = d.id; });
+      }
       markPlaying();
     }
     function init() {
