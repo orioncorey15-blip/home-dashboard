@@ -198,6 +198,11 @@ body.sp-full .nav-handle { display: none; }
 
 @media (prefers-reduced-motion: reduce) { body.nav-auto #sidebar { -webkit-transition: none; transition: none; } }
 
+/* rail hidden: room on the left for the handle (its touch area ends 48 px in), so it never covers content.
+   Extra specificity so the later page/compact #content paddings don't win. Photos stay full-bleed. */
+body.nav-hidden:not([data-page="photos"]) #container #content { padding-left: 52px; }
+@media (max-width: 600px) { body.nav-hidden:not([data-page="photos"]) #container #content { padding-left: 12px; } }
+
 /* =====================  HOME  ===================== */
 .home-wrap { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
 .home-hero { -webkit-flex-shrink: 0; flex-shrink: 0; text-align: center; padding: 2px 0 18px; }

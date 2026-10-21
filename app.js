@@ -199,6 +199,10 @@
      left edge (touch area 44x88, a few px in: a swipe from the very edge opens Fully Kiosk's menu) slides it back
      in over the content. While it's open, a nav tap navigates and restarts the timer, a tap outside only closes
      it (a transparent scrim takes that tap), and NAV_HIDE_SECONDS of quiet hides it again.
+     It never hides while the user is busy: a finger/pointer is down, an input has focus, the full-screen
+     player / full radar / YouTube max view or real fullscreen is on, or a sheet or dialog is open; it waits
+     another NAV_HIDE_SECONDS instead. Moving a finger (throttled) and scrolling count as activity.
+     While hidden, the content gets ~52 px of left padding so the handle never covers it.
      NAV_AUTOHIDE: false = the rail is always shown. Phones (bottom tab bar) are left alone. */
   var navHide = (function () {
     var on = CFG.NAV_AUTOHIDE !== false;
@@ -211,6 +215,22 @@
       // the content changed width: let the maps / Home / Media grids refit
       try { var ev = document.createEvent("HTMLEvents"); ev.initEvent("resize", false, false); window.dispatchEvent(ev); } catch (e) { /* ignore */ }
     }
+    // a finger/pointer is down (a missed "up" stops counting after 30 s)
+    var downAt = 0;
+    function pressing() { return downAt > 0 && (new Date().getTime() - downAt) < 30000; }
+    function shown(el) { return !!el && (el.offsetWidth > 0 || el.offsetHeight > 0); }
+    // something the rail mustn't slide away under: typing, a full-screen view, a sheet or dialog
+    function busy() {
+      if (pressing()) return true;
+      var a = document.activeElement, tag = a && a.tagName ? String(a.tagName).toUpperCase() : "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable)) return true;
+      var cls = " " + body.className + " ";
+      if (/ (sp-full|radar-full|yt-max-open) /.test(cls)) return true;
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement || document.mozFullScreenElement) return true;
+      var open = document.querySelectorAll(".modal.open, .spb-sheet, .bt-help, [role=\"dialog\"]");
+      for (var i = 0; i < open.length; i++) if (shown(open[i])) return true;
+      return false;
+    }
     function arm() {
       if (timer) clearTimeout(timer);
       timer = null;
@@ -218,7 +238,7 @@
     }
     function hide() {
       timer = null;
-      if (phone()) { arm(); return; }
+      if (phone() || busy()) { arm(); return; } // postpone: try again after another NAV_HIDE_SECONDS
       if (state === "peek") { state = "hidden"; toggleClass(body, "nav-peek", false); return; }
       if (state !== "shown") return;
       state = "sliding";
@@ -250,11 +270,21 @@
       arm();
     }
     function activity() { if (state === "shown" || state === "peek") arm(); }
+    var lastMove = 0;
+    function moved() { // finger/pointer moves and scrolling: throttled to one timer restart per 250 ms
+      var now = new Date().getTime();
+      if (now - lastMove < 250) return;
+      lastMove = now;
+      activity();
+    }
+    function down() { downAt = new Date().getTime(); activity(); }
+    function up(e) { if (e && e.touches && e.touches.length) return; downAt = 0; activity(); }
     if (!on) return { arm: function () {}, state: function () { return "off"; } };
     toggleClass(body, "nav-auto", true);
-    each(["touchstart", "mousedown", "pointerdown", "keydown", "wheel"], function (t) {
-      document.addEventListener(t, activity, true);
-    });
+    each(["touchstart", "mousedown", "pointerdown"], function (t) { document.addEventListener(t, down, true); });
+    each(["touchend", "touchcancel", "mouseup", "pointerup", "pointercancel"], function (t) { document.addEventListener(t, up, true); });
+    each(["keydown"], function (t) { document.addEventListener(t, activity, true); });
+    each(["touchmove", "pointermove", "mousemove", "wheel", "scroll"], function (t) { document.addEventListener(t, moved, true); });
     if (handle) handle.addEventListener("click", function (e) { if (e && e.stopPropagation) e.stopPropagation(); reveal(); });
     if (scrim) {
       // close on the touch itself and cancel the click that would follow, so nothing underneath gets it
