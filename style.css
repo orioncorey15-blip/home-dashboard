@@ -717,6 +717,7 @@ body[data-page="calendar"] #content, body[data-page="weather"] #content { paddin
 
 /* Spotify settings menu (top-right of the player card) */
 .sp-menu-wrap { position: absolute; top: 14px; right: 14px; z-index: 20; }
+.sp-menu-wrap.off-source { display: none !important; }
 .sp-menu-btn { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); color: rgba(228, 234, 250, 0.8); }
 .sp-menu { position: absolute; top: 42px; right: 0; min-width: 210px; padding: 6px; border-radius: 14px; background: #1a2240; border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
 .sp-menu-head { padding: 8px 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(228, 234, 250, 0.56); }

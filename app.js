@@ -1915,6 +1915,8 @@
     var sp = $("spotify-panel"), yt = $("youtube-panel");
     if (sp) sp.style.display = activeSource === "spotify" ? "" : "none";
     if (yt) yt.style.display = activeSource === "youtube" ? "" : "none";
+    // the Spotify settings menu belongs to the Spotify panel (on YouTube it would cover the Play button)
+    toggleClass($("sp-menu-wrap"), "off-source", activeSource !== "spotify");
     each(document.querySelectorAll(".shortcut-btn"), function (b) {
       toggleClass(b, "active", b.getAttribute("data-source") === activeSource);
     });
