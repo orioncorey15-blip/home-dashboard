@@ -74,7 +74,7 @@
     if (n === "02") return night ? "partly-night" : "partly-day";
     if (n === "03") return "cloudy";
     if (n === "04") return "overcast";
-    if (n === "09") return "drizzle";
+    if (n === "09") return "rain"; // shower rain: the heavier rain icon
     if (n === "10") return "rain";
     if (n === "11") return "storm";
     if (n === "13") return "snow";

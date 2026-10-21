@@ -119,6 +119,10 @@ Zoom: the map fits roughly the home county and its neighbours (about ±0.3° lat
 Cleveland) into whatever size it has, capped at `RADAR_ZOOM` (default 9); the Home preview may use up to one level less.
 The recenter button goes back to that home view. *View Full Radar* makes the radar fill the Weather page (*Close* returns).
 
+Old or low-memory tablets (2 GB RAM or less, or a screen of 1024 px or less, like the 1024x600 one) load only the newest
+radar frame and don't animate, so the Play button and frame bar are hidden. `RADAR_ANIMATE: true` / `false` in
+`config.js` forces animation on / off. In night mode the loop stops on the newest frame and restarts in the morning.
+
 `LOCATION_NAME` in `config.js` is the place name shown on the Weather page and Home card. It is only a label in the
 browser; the weather function still uses `OWM_ZIP` and returns no coordinates or city name.
 

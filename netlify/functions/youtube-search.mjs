@@ -16,6 +16,18 @@ export default async (req) => {
   if (raw != null && raw.length > 500) return fail(400, "Search is too long", VARY);
   const q = cleanQuery(raw);
   if (!q) return fail(400, "Type something to search for", VARY);
+  if (raw !== q) {
+    // send other spellings of the same search to its canonical URL, so the CDN caches it once
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: "/api/youtube-search?q=" + encodeURIComponent(q),
+        "cache-control": "public, max-age=86400",
+        "netlify-cdn-cache-control": "public, s-maxage=86400",
+        "netlify-vary": "query=" + VARY.join("|"),
+      },
+    });
+  }
   const key = env("GOOGLE_API_KEY");
   if (!key) return fail(503, "YouTube search not configured (set GOOGLE_API_KEY)", VARY);
   const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true" +

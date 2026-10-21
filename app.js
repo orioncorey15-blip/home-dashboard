@@ -790,6 +790,8 @@
         t.setAttribute("data-i", i);
         box.appendChild(t);
       }
+      // single frame (low-memory mode or only one frame available): nothing to play, hide Play + ticks
+      toggleClass(document.body, "radar-single", frames.length < 2);
       paintTicks();
     }
     function paintTicks() {
@@ -2576,12 +2578,12 @@
       msg("");
       showResults(true);
       setText("yt-results-title", "Searching for \u201c" + q + "\u201d\u2026");
-      var key = q.toLowerCase();
+      var key = q.toLowerCase().replace(/\s+/g, " "); // same form the server uses (no redirect hop)
       if (searchCache[key]) { lastResults = searchCache[key]; renderResults(q, lastResults); return; }
       if (navigator.onLine === false) { var o = searchError(new Error("Network error")); resultsMessage(o[0], o[1], true); return; }
       resultsMessage("Searching\u2026", "", false);
       var seq = ++searchSeq;
-      getJSON(apiUrl("youtube-search?q=" + encodeURIComponent(q)), function (err, data, meta) {
+      getJSON(apiUrl("youtube-search?q=" + encodeURIComponent(key)), function (err, data, meta) {
         if (seq !== searchSeq) return; // a newer search started
         if (err || !data || !data.items) {
           if (window.console) console.warn("YouTube search failed:", err);

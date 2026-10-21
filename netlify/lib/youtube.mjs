@@ -1,9 +1,12 @@
 // Helpers for the YouTube search function (kept separate so tests can import them).
 export const MAX_Q = 80;
 
-// Collapse whitespace, drop control characters, cap the length.
+// Lowercase, collapse whitespace, drop control characters, cap the length. Done before the
+// cache lookup and the API call, so "Fireplace " and "fireplace" share one cached answer
+// (YouTube search isn't case-sensitive).
 export function cleanQuery(raw) {
   return String(raw == null ? "" : raw)
+    .toLowerCase()
     .replace(/[\u0000-\u001f\u007f]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
