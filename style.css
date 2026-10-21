@@ -427,6 +427,8 @@ body.playing .eq i:nth-child(4) { -webkit-animation-delay: 0.1s; animation-delay
 .radar-foot .live-dot { background: #4f9bff; box-shadow: 0 0 0 3px rgba(79, 155, 255, 0.22); margin-right: 8px; }
 .radar-foot-sep { margin: 0 6px; }
 .weather-radar .leaflet-control-attribution { font-size: 8px; }
+/* the map credits (bottom edge, up to 2 lines on the Tab A8) stay readable: the play bar floats above them */
+.weather-radar .radar-controls { bottom: 32px; }
 /* a single frame has nothing to play: the footer already says when it's from */
 .radar-single .radar-controls { display: none; }
 body.radar-full .weather-radar { position: fixed; top: 0; left: 92px; right: 0; bottom: 0; z-index: 300; border-radius: 0; border: none; }
