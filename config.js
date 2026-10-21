@@ -36,6 +36,9 @@ var CONFIG = {
   //   https://ui-revamp--homedashboard8080.netlify.app/spotify-callback
   // Only set this if the dashboard is opened from a different address (e.g. a custom domain).
   SPOTIFY_REDIRECT_URI: "",
+  // Which Spotify device to start playback on when nothing is playing (part of its name, e.g. "Galaxy Tab").
+  // Leave empty to pick the tablet's own Spotify app automatically.
+  SPOTIFY_DEVICE_NAME: "",
 
   // YouTube favourites shown as quick buttons on the Media page.
   // id = the video ID (the part after "v=" in a YouTube link) or a full link.

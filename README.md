@@ -80,23 +80,39 @@ Night mode dims the screen on the schedule in `config.js` (`NIGHT_MODE_START` / 
 `null` turns the schedule off). The page reloads itself every night at `DAILY_RELOAD_HOUR` (default 3 AM).
 
 ## 3. Spotify (optional)
-Shows the song playing on any of your Spotify devices, with album art and progress, and gives
-play/pause, next, previous and volume. Sign-in uses Spotify's PKCE flow, so there is **no secret** anywhere.
+Media → Spotify becomes an Android Auto-style browser once connected: your **Playlists**, **Liked Songs**, **Recent**,
+saved **Albums** and **Podcasts** as big cover grids/rows (more load as you scroll), playlist/album/podcast pages with
+**Play** and **Shuffle**, **Search** (songs, artists, albums, playlists, podcasts), **Up next** (the queue) and a
+**device picker**. A compact mini player sits under the browser; ⛶ (or tapping the song title) opens a full-screen
+player with big art, progress, controls, shuffle/repeat and volume (✕, tapping the art, or Esc closes it).
+Sign-in uses Spotify's PKCE flow, so there is **no secret** anywhere.
 
 1. Go to https://developer.spotify.com/dashboard, log in, *Create app*.
-   - Redirect URI: `https://homedashboard8080.netlify.app/spotify-callback` (exactly; https is required).
+   - Redirect URIs (exactly, https, no trailing slash):
+     `https://homedashboard8080.netlify.app/spotify-callback` and
+     `https://ui-revamp--homedashboard8080.netlify.app/spotify-callback` (the draft site).
    - APIs used: *Web API*.
-2. Copy the app's **Client ID** into `config.js` → `SPOTIFY_CLIENT_ID` and commit/deploy.
-   (The client ID is public by design. Don't copy the client secret anywhere; it isn't used.)
+2. Copy the app's **Client ID** into `config.js` → `SPOTIFY_CLIENT_ID` and commit/deploy (done:
+   `5f41fa0dba664f37bbd82df44be3f87a`). Leave `SPOTIFY_REDIRECT_URI` empty; the dashboard uses its own address +
+   `/spotify-callback`. The client ID is public by design; the client secret isn't used anywhere.
 3. In the app's *User Management*, add the name + email of each Spotify account that will connect
-   (development-mode apps allow up to 5 users). Spotify currently requires the **app owner to have Premium**
+   (development-mode apps allow up to 5 users). Spotify requires the **app owner to have Premium**
    for a development-mode app to work.
 4. On the tablet: Media → **Connect Spotify** → log in → you're sent back to the dashboard. The tablet stays signed in
-   (the refresh token is kept in the browser's local storage; *Disconnect Spotify* removes it).
+   (the refresh token is kept in the browser's local storage; ⋯ → *Disconnect Spotify* removes it).
+   Permissions asked for: read your library, playlists (incl. collaborative) and recently played; see and control playback.
 
-Controls (play/pause, skip, volume) need **Spotify Premium** on the account that's listening; on a free account the
-dashboard still shows what's playing and says "Controls need Spotify Premium". Start music on a phone/speaker first:
-the dashboard is a remote, not a player. It checks every ~5 s while the Media or Home page is visible, less often otherwise.
+**Where it plays.** Spotify plays through its own apps; the dashboard is the remote. Install the Spotify app on the
+tablet: when nothing is playing, tapping a song starts it on the tablet's Spotify app (or the device named in
+`SPOTIFY_DEVICE_NAME`). If no Spotify device is awake, the device picker explains it and offers **Open Spotify app**
+(Fully Kiosk opens `com.spotify.music`; elsewhere an `intent:` link with an open.spotify.com fallback).
+Video podcasts can't be shown in a web page, so they get an **Open in Spotify app to watch** button.
+
+Limits (Spotify's, not the dashboard's): playback control needs **Premium**; a free account shows what's playing and
+"Controls need Spotify Premium". Spotify no longer gives new apps editorial/"made for you" playlists, recommendations,
+new releases or artist top tracks, so the browser shows only your own library + search. Since Feb 2026 Spotify only lists
+the songs of playlists you own or collaborate on (others still play with **Play**), and search returns up to 10 of each type.
+Rate limits (429) are retried after Spotify's Retry-After; an expired sign-in is refreshed automatically.
 
 ## 4. YouTube
 Media → YouTube button: paste a link (youtu.be/…, youtube.com/watch?v=…, shorts, live) or a video ID, or tap a favourite

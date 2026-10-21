@@ -1843,6 +1843,9 @@
     if (!volumeSlider) return;
     var v = Math.max(0, Math.min(100, Number(volumeSlider.value) || 0));
     volumeSlider.style.backgroundSize = v + "% 14px, 100% 14px";
+    var fv = $("sp-full-vol"); // the full-screen Spotify player's slider mirrors this one
+    if (fv && document.activeElement !== fv) fv.value = v;
+    if (fv) fv.style.backgroundSize = v + "% 8px, 100% 8px";
   }
 
   function fmtDuration(ms) {
@@ -1947,6 +1950,15 @@
     store.set("isMuted", isMuted);
     paintVolume();
     applyVolume(v);
+  }
+  if ($("sp-full-vol")) {
+    var fullVolInput = function () {
+      if (!volumeSlider) return;
+      volumeSlider.value = $("sp-full-vol").value;
+      onVolumeInput();
+    };
+    $("sp-full-vol").addEventListener("input", fullVolInput);
+    $("sp-full-vol").addEventListener("change", fullVolInput);
   }
   if (volumeSlider) {
     volumeSlider.addEventListener("input", onVolumeInput);
@@ -2287,12 +2299,21 @@
       });
     }
 
+    // Friendly text for a failed Spotify call (shared with the browse pages).
+    function errorText(err) {
+      var why = (err.message || "") + " " + (err.reason || "");
+      if (err.status === 403 && /premium/i.test(why)) return "Controls need Spotify Premium";
+      if (err.status === 404 || /NO_ACTIVE_DEVICE/.test(why)) return "No active Spotify device. Open Spotify on the tablet, or pick a device.";
+      if (err.status === 429) return "Spotify is busy" + (err.retryAfter ? ", try again in " + Math.ceil(err.retryAfter) + " s." : ", try again in a moment.");
+      if (err.status === 401) return "Spotify sign-in expired. Disconnect and connect again.";
+      if (err.status === 403) return "Spotify didn't allow that (" + (err.message || "forbidden") + ").";
+      if (!err.status) return "Can't reach Spotify right now.";
+      return "Spotify: " + err.message;
+    }
     function onCommandError(err) {
       if (!err) { setMessage(""); return; }
-      if (err.status === 403 && /premium/i.test(err.message + " " + err.reason)) setMessage("Controls need Spotify Premium");
-      else if (err.status === 404 || err.reason === "NO_ACTIVE_DEVICE") setMessage("No active Spotify device. Start playing on a phone or speaker first.");
-      else if (err.status === 429) setMessage("Spotify is busy, try again in a moment.");
-      else setMessage("Spotify: " + err.message);
+      setMessage(errorText(err));
+      if ((err.status === 404 || /NO_ACTIVE_DEVICE/.test(err.message + " " + err.reason)) && spBrowse) spBrowse.noDevice();
     }
 
     function command(which) {
@@ -2387,7 +2408,13 @@
       var art = $("sp-art");
       var panel = $("spotify-panel");
       toggleClass(panel, "sp-connected", on);
+      if ($("sp-browse")) $("sp-browse").style.display = on ? "" : "none";
+      if ($("shuffle-btn")) $("shuffle-btn").style.display = on ? "" : "none";
+      if (!on && document.body.classList.contains("sp-full")) setFull(false);
+      if (spBrowse) spBrowse.onState(on ? state : null, on);
       if (!on) {
+        setText("sp-device", "");
+        if ($("sp-watch")) $("sp-watch").style.display = "none";
         if (wrap) wrap.style.display = "";
         setText("sp-pos", "0:00"); setText("sp-dur", "0:00");
         if ($("sp-progress-bar")) $("sp-progress-bar").style.width = "0%";
@@ -2402,7 +2429,7 @@
         setText("track-info", trackLine(item));
       } else {
         setText("play-status", "Nothing playing on Spotify");
-        setText("track-info", "Start something on a phone or speaker");
+        setText("track-info", "Pick something below to play");
       }
       toggleClass(playBtn, "paused", !!(state && state.is_playing));
       var src = artUrl(item);
@@ -2414,6 +2441,11 @@
       }
       if (wrap) wrap.style.display = "";
       if (state && state.repeat_state) paintRepeat(state.repeat_state);
+      paintShuffle(!!(state && state.shuffle_state));
+      var d0 = state && state.device;
+      setText("sp-device", d0 && d0.name ? "Playing on " + d0.name : "");
+      // video podcasts can't be watched through the Web API; hand off to the app
+      if ($("sp-watch")) $("sp-watch").style.display = isVideoEpisode(item) ? "" : "none";
       renderProgress();
       var dev = state && state.device;
       if (dev && typeof dev.volume_percent === "number" && volumeSlider && activeSource === "spotify" &&
@@ -2424,6 +2456,34 @@
       }
       updateNowPlaying();
       tick();
+    }
+
+    function paintShuffle(on) {
+      var b = $("shuffle-btn");
+      toggleClass(b, "on", on);
+      if (b) { b.setAttribute("aria-pressed", on ? "true" : "false"); b.setAttribute("aria-label", "Shuffle: " + (on ? "on" : "off")); }
+    }
+    function setShuffle(on, cb) {
+      if (state) state.shuffle_state = on;
+      paintShuffle(on);
+      api("PUT", "/me/player/shuffle?state=" + (on ? "true" : "false"), undefined, function (err) {
+        if (err && state) { state.shuffle_state = !on; paintShuffle(!on); }
+        onCommandError(err);
+        if (cb) cb(err);
+        schedulePoll(800);
+      });
+    }
+    function isVideoEpisode(item) {
+      if (!item || item.type !== "episode") return false;
+      var mt = String((item.show && item.show.media_type) || item.media_type || "");
+      return item.is_video === true || item.video === true || /video/i.test(mt);
+    }
+
+    // Full-screen now playing (big art, title, progress, controls, volume). Tap the art or the close button to leave.
+    function setFull(on) {
+      toggleClass(document.body, "sp-full", !!on);
+      if ($("sp-full-btn")) $("sp-full-btn").setAttribute("aria-pressed", on ? "true" : "false");
+      paintVolume();
     }
 
     function showMenu(on) {
@@ -2464,6 +2524,24 @@
         var m = $("sp-menu");
         if (m && m.style.display !== "none" && !m.contains(e.target)) showMenu(false);
       });
+      if ($("shuffle-btn")) $("shuffle-btn").addEventListener("click", function () { setShuffle(!(state && state.shuffle_state)); });
+      if ($("sp-full-btn")) $("sp-full-btn").addEventListener("click", function () { setFull(!document.body.classList.contains("sp-full")); });
+      if ($("sp-full-close")) $("sp-full-close").addEventListener("click", function () { setFull(false); });
+      if ($("sp-player")) $("sp-player").addEventListener("click", function (e) {
+        // mini player: tapping the art or the title opens full screen; in full screen, tapping the art closes it
+        var t = e.target, full = document.body.classList.contains("sp-full");
+        var onArt = upTo(t, "album-art"), onInfo = upTo(t, "now-playing");
+        if (!connected()) return;
+        if (full && onArt) setFull(false);
+        else if (!full && (onArt || onInfo)) setFull(true);
+      });
+      document.addEventListener("keydown", function (e) {
+        if ((e.keyCode === 27 || e.key === "Escape") && document.body.classList.contains("sp-full")) setFull(false);
+      });
+      if ($("sp-watch")) $("sp-watch").addEventListener("click", function () {
+        var item = state && state.item;
+        openSpotifyApp(item && item.uri);
+      });
       if ($("sp-art")) $("sp-art").addEventListener("error", function () { toggleClass(this.parentNode, "has-art", false); this.style.display = "none"; });
       if ($("sp-disconnect")) $("sp-disconnect").addEventListener("click", function () {
         showMenu(false);
@@ -2480,9 +2558,573 @@
 
     return {
       init: init, connected: connected, command: command, togglePlay: togglePlay, setVolume: setVolume,
+      api: api, errorText: errorText, onCommandError: onCommandError, setMessage: setMessage, setShuffle: setShuffle,
+      setFull: setFull, isVideoEpisode: isVideoEpisode, getState: function () { return state; },
+      soon: function (ms) { schedulePoll(ms || 700); },
       homeText: homeText, deviceName: deviceName, info: info, setRepeat: setRepeat,
       onPageChange: function () { if (connected()) { schedulePoll(currentPage === "media" ? 300 : undefined); tick(); } },
       refresh: function () { if (connected()) poll(); }
+    };
+  })();
+
+  // nearest ancestor (or self) with a class; old WebViews have no Element.closest
+  function upTo(node, cls) {
+    while (node && node.nodeType === 1) {
+      if (node.classList && node.classList.contains(cls)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  // Open the Spotify Android app (optionally at a track/episode). Fully Kiosk: its JS interface;
+  // otherwise an intent: link that falls back to open.spotify.com where the app isn't there.
+  var SPOTIFY_PKG = "com.spotify.music";
+  function spotifyWebUrl(uri) {
+    var m = /^spotify:(track|episode|album|playlist|show|artist):([A-Za-z0-9]+)$/.exec(uri || "");
+    return m ? "https://open.spotify.com/" + m[1] + "/" + m[2] : "https://open.spotify.com/";
+  }
+  function spotifyIntent(uri) {
+    var web = spotifyWebUrl(uri);
+    if (uri && web !== "https://open.spotify.com/") {
+      return "intent://" + web.replace(/^https:\/\//, "") + "#Intent;scheme=https;package=" + SPOTIFY_PKG +
+        ";S.browser_fallback_url=" + encodeURIComponent(web) + ";end";
+    }
+    return "intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=" + SPOTIFY_PKG +
+      ";S.browser_fallback_url=" + encodeURIComponent(web) + ";end";
+  }
+  function openSpotifyApp(uri) {
+    var f = window.fully;
+    try {
+      if (f && uri && typeof f.startIntent === "function") { f.startIntent(spotifyIntent(uri)); return "fully-intent"; }
+      if (f && typeof f.startApplication === "function") { f.startApplication(SPOTIFY_PKG); return "fully-app"; }
+      if (f && typeof f.startIntent === "function") { f.startIntent(spotifyIntent(uri)); return "fully-intent"; }
+    } catch (e) { /* fall through */ }
+    if (/Android/i.test(navigator.userAgent || "")) { window.location.href = spotifyIntent(uri); return "intent"; }
+    window.open(spotifyWebUrl(uri), "_blank");
+    return "web";
+  }
+
+  /* ===== SPOTIFY BROWSE (library, playlists/albums/podcasts, search, devices, up next) ===== */
+  // Android Auto-style: big covers and rows, a compact mini player under them, full screen on demand.
+  // Only the user's own library + search; Spotify no longer gives new apps editorial/recommended playlists.
+  var spBrowse = (function () {
+    var API = "https://api.spotify.com/v1";
+    var TABS = {
+      playlists: { path: "/me/playlists?limit=30", layout: "grid", empty: "No playlists yet." },
+      liked: { path: "/me/tracks?limit=50", layout: "rows", empty: "No liked songs yet." },
+      recent: { path: "/me/player/recently-played?limit=50", layout: "rows", empty: "Nothing played recently." },
+      albums: { path: "/me/albums?limit=30", layout: "grid", empty: "No saved albums." },
+      shows: { path: "/me/shows?limit=30", layout: "grid", empty: "No saved podcasts." }
+    };
+    var tab = "playlists";
+    var view = null;          // what the body shows: { kind, path, layout, items, next, ... }
+    var stack = [];           // views to go back to
+    var seq = 0;              // ignores responses for views we've left
+    var loading = false, retryTimer = null, started = false, lastState = null, sheet = "";
+    var body, head;
+
+    function api(method, path, data, cb) { spotify.api(method, path, data, cb); }
+    function rel(url) { return String(url || "").indexOf(API) === 0 ? url.slice(API.length) : url; }
+
+    function pickImage(imgs, want) {
+      if (!imgs || !imgs.length) return "";
+      var best = imgs[0];
+      for (var i = 0; i < imgs.length; i++) if (imgs[i] && imgs[i].width && imgs[i].width >= want && (!best.width || imgs[i].width < best.width || best.width < want)) best = imgs[i];
+      return (best && best.url) || "";
+    }
+    function names(list) { var o = []; each(list, function (a) { if (a && a.name) o.push(a.name); }); return o.join(", "); }
+
+    // One shape for every kind of thing Spotify returns.
+    function norm(x) {
+      if (!x) return null;
+      var wrapped = x.track || x.item || x.album || x.show || x.episode;
+      if (wrapped && typeof wrapped === "object" && !x.type) x = wrapped;
+      else if (x.played_at && x.track) x = x.track;
+      if (!x || !x.type) return null;
+      var o = { type: x.type, id: x.id, uri: x.uri, name: x.name || "", sub: "", img: "", dur: x.duration_ms || 0, raw: x };
+      if (x.type === "track") {
+        o.sub = names(x.artists) + (x.album && x.album.name ? " · " + x.album.name : "");
+        o.img = pickImage(x.album && x.album.images, 64);
+        o.album = x.album && x.album.uri;
+      } else if (x.type === "episode") {
+        o.sub = (x.show && x.show.name) || (x.release_date || "");
+        o.img = pickImage(x.images || (x.show && x.show.images), 64);
+        o.video = spotify.isVideoEpisode(x);
+      } else if (x.type === "playlist") {
+        var n = (x.items && x.items.total) || (x.tracks && x.tracks.total);
+        o.sub = (x.owner && x.owner.display_name ? x.owner.display_name : "Playlist") + (n ? " · " + n + " songs" : "");
+        o.img = pickImage(x.images, 240);
+        o.own = !!(x.owner && x.owner.id && x.collaborative !== undefined);
+      } else if (x.type === "album") {
+        o.sub = names(x.artists) || "Album";
+        o.img = pickImage(x.images, 240);
+      } else if (x.type === "show") {
+        o.sub = x.publisher || "Podcast";
+        o.img = pickImage(x.images, 240);
+        o.video = /video/i.test(String(x.media_type || ""));
+      } else if (x.type === "artist") {
+        o.sub = "Artist";
+        o.img = pickImage(x.images, 240);
+      }
+      return o;
+    }
+
+    function msg(text, opts) {
+      var box = el("div", "spb-empty");
+      box.appendChild(el("div", "spb-empty-title", text));
+      if (opts && opts.sub) box.appendChild(el("div", "spb-empty-sub", opts.sub));
+      if (opts && opts.retry) {
+        var b = el("button", "pill-btn ghost spb-retry", "Try again");
+        b.addEventListener("click", opts.retry);
+        box.appendChild(b);
+      }
+      return box;
+    }
+
+    // Friendly text for a failed library/search call; 429 waits Retry-After and tries again by itself.
+    function loadError(err, retry) {
+      if (err.status === 429) {
+        var wait = Math.min(60, Math.max(2, err.retryAfter || 5));
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(retry, wait * 1000);
+        return msg("Spotify asked us to slow down", { sub: "Trying again in " + Math.ceil(wait) + " s…" });
+      }
+      return msg(spotify.errorText(err), { retry: retry });
+    }
+
+    /* ---------- rendering ---------- */
+    function cover(o, round) {
+      var c = el("div", "spb-cover" + (round ? " round" : ""));
+      if (o.img) {
+        var img = document.createElement("img");
+        img.alt = ""; img.setAttribute("referrerpolicy", "no-referrer"); img.setAttribute("loading", "lazy");
+        img.src = o.img;
+        img.onerror = function () { if (img.parentNode) img.parentNode.removeChild(img); };
+        c.appendChild(img);
+      } else {
+        c.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 17.5V5.5l11-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>';
+      }
+      return c;
+    }
+    function card(o, onTap) {
+      var b = el("button", "spb-card");
+      b.setAttribute("data-uri", o.uri || "");
+      b.appendChild(cover(o, o.type === "artist"));
+      b.appendChild(el("div", "spb-name", o.name));
+      b.appendChild(el("div", "spb-sub", o.sub));
+      b.addEventListener("click", function () { onTap(o); });
+      return b;
+    }
+    function row(o, i, onTap) {
+      var b = el(onTap ? "button" : "div", "spb-row" + (onTap ? "" : " static"));
+      b.setAttribute("data-uri", o.uri || "");
+      b.setAttribute("data-index", String(i));
+      if (o.img) b.appendChild(cover(o)); else b.appendChild(el("div", "spb-num", String(i + 1)));
+      var t = el("div", "spb-row-text");
+      t.appendChild(el("div", "spb-name", o.name));
+      t.appendChild(el("div", "spb-sub", o.sub));
+      b.appendChild(t);
+      if (o.video) {
+        var w = el("span", "spb-badge", "Video");
+        b.appendChild(w);
+      }
+      b.appendChild(el("div", "spb-dur", o.dur ? fmtDuration(o.dur) : ""));
+      if (onTap) b.addEventListener("click", function () { onTap(o, i); });
+      return b;
+    }
+    function markPlaying() {
+      var cur = lastState && lastState.item && lastState.item.uri;
+      each(body ? body.querySelectorAll(".spb-row") : [], function (r) { toggleClass(r, "playing", !!cur && r.getAttribute("data-uri") === cur); });
+    }
+
+    function paintHead() {
+      head.innerHTML = "";
+      if (!view || !view.title) { head.style.display = "none"; return; }
+      head.style.display = "";
+      var back = el("button", "spb-back");
+      back.setAttribute("aria-label", "Back");
+      back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>';
+      back.addEventListener("click", goBack);
+      head.appendChild(back);
+      if (view.img !== undefined) head.appendChild(cover({ img: view.img }, view.round));
+      var t = el("div", "spb-head-text");
+      t.appendChild(el("div", "spb-head-title", view.title));
+      if (view.sub) t.appendChild(el("div", "spb-sub", view.sub));
+      head.appendChild(t);
+      if (view.uri && view.playable !== false) {
+        var p = el("button", "spb-play");
+        p.id = "spb-play";
+        p.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><span>Play</span>';
+        p.addEventListener("click", function () { playContext(view.uri, null, false); });
+        head.appendChild(p);
+        var sh = el("button", "spb-shuffle");
+        sh.id = "spb-shuffle";
+        sh.setAttribute("aria-label", "Shuffle play");
+        sh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3.5 7h3.2c1.6 0 3 .8 3.9 2.1l3.8 5.8c.9 1.3 2.3 2.1 3.9 2.1h2.2M3.5 17h3.2c1.6 0 3-.8 3.9-2.1M14.4 9.1c.9-1.3 2.3-2.1 3.9-2.1h2.2M18 4.5 20.5 7 18 9.5M18 14.5l2.5 2.5-2.5 2.5"/></svg>';
+        sh.addEventListener("click", function () { playContext(view.uri, null, true); });
+        head.appendChild(sh);
+      }
+      if (view.watch) {
+        var w = el("button", "spb-watch", "Open in Spotify app to watch");
+        w.addEventListener("click", function () { openSpotifyApp(view.uri); });
+        head.appendChild(w);
+      }
+    }
+
+    function paint() {
+      if (!body || !view) return;
+      paintHead();
+      body.innerHTML = "";
+      body.className = "spb-body " + (view.layout === "grid" ? "is-grid" : view.layout === "search" ? "is-search" : "is-rows");
+      if (view.error) { body.appendChild(view.error); return; }
+      if (view.layout === "search") { paintSearch(); return; }
+      if (!view.items.length && !loading) { body.appendChild(msg(view.empty || "Nothing here.", { sub: view.emptySub })); return; }
+      var frag = document.createDocumentFragment();
+      each(view.items, function (o, i) { frag.appendChild(view.layout === "grid" ? card(o, open) : row(o, i, view.tap)); });
+      body.appendChild(frag);
+      if (loading) body.appendChild(el("div", "spb-loading", "Loading…"));
+      markPlaying();
+    }
+    function append(list) {
+      // add the next page without rebuilding (keeps the scroll position)
+      var spin = body.querySelector(".spb-loading");
+      if (spin) body.removeChild(spin);
+      var start = view.items.length;
+      each(list, function (o) { if (o) view.items.push(o); });
+      if (start === 0) { paint(); return; }
+      var frag = document.createDocumentFragment();
+      for (var i = start; i < view.items.length; i++) frag.appendChild(view.layout === "grid" ? card(view.items[i], open) : row(view.items[i], i, view.tap));
+      body.appendChild(frag);
+      markPlaying();
+    }
+
+    /* ---------- loading (paged; the next page loads as you scroll near the end) ---------- */
+    function load(path, first) {
+      var my = seq, v = view;
+      loading = true;
+      if (first) paint();
+      api("GET", path, undefined, function (err, data) {
+        if (my !== seq || v !== view) return;
+        loading = false;
+        if (err) {
+          if (v.on403 && err.status === 403) { v.error = v.on403(); paint(); return; }
+          if (first || !v.items.length) { v.error = loadError(err, function () { v.error = null; load(path, true); }); paint(); }
+          else body.appendChild(loadError(err, function () { load(path, false); }));
+          return;
+        }
+        var page = (v.pick ? v.pick(data) : data) || {};
+        v.next = page.next ? rel(page.next) : null;
+        var list = [];
+        each(page.items || [], function (x) { var o = norm(x); if (o && (!v.filter || v.filter(o))) list.push(o); });
+        if (first) { v.items = []; v.error = null; body.innerHTML = ""; }
+        append(list);
+        if (first) paint();
+        fillScreen();
+      });
+    }
+    function fillScreen() {
+      // keep loading while the list doesn't reach the bottom yet (infinite scroll needs something to scroll)
+      if (view && view.next && !loading && body.scrollHeight <= body.clientHeight + 200) load(view.next, false);
+    }
+    function onScroll() {
+      if (view && view.next && !loading && body.scrollTop + body.clientHeight > body.scrollHeight - 300) load(view.next, false);
+    }
+
+    function show(v, push) {
+      seq++;
+      clearTimeout(retryTimer);
+      if (push && view) stack.push(view);
+      view = v;
+      if (v.items && v.items.length) { loading = false; paint(); body.scrollTop = v.scroll || 0; return; }
+      v.items = [];
+      load(v.path, true);
+      body.scrollTop = 0;
+    }
+    function goBack() {
+      var prev = stack.pop();
+      if (!prev) { setTab(tab); return; }
+      seq++; view = prev; loading = false; paint();
+      body.scrollTop = prev.scroll || 0;
+    }
+
+    function setTab(t) {
+      if (!TABS[t]) t = "playlists";
+      tab = t;
+      stack = [];
+      each(document.querySelectorAll(".spb-tab"), function (b) { toggleClass(b, "active", b.getAttribute("data-tab") === t); b.setAttribute("aria-selected", b.getAttribute("data-tab") === t ? "true" : "false"); });
+      var T = TABS[t];
+      var v = { kind: "tab", tab: t, path: T.path, layout: T.layout, empty: T.empty };
+      if (t === "liked") v.tap = function (o, i) { playList(v.items, i); };
+      if (t === "recent") v.tap = function (o) {
+        var ctx = o.raw && o.raw.__ctx;
+        if (ctx && /^spotify:(album|playlist|artist|show):/.test(ctx)) playContext(ctx, { uri: o.uri }, false);
+        else playUris([o.uri], 0);
+      };
+      if (t === "recent") v.pick = function (d) {
+        // remember where each song was played from, so it can play on in that playlist/album
+        each(d && d.items, function (x) { if (x && x.track) x.track.__ctx = x.context && x.context.uri; });
+        return d;
+      };
+      store.set("spb_tab", t);
+      show(v, false);
+    }
+
+    /* ---------- detail views ---------- */
+    function open(o) {
+      if (view) view.scroll = body.scrollTop;
+      if (o.type === "playlist") {
+        var v = { kind: "playlist", uri: o.uri, title: o.name, sub: o.sub, img: o.img, layout: "rows",
+          path: "/playlists/" + encodeURIComponent(o.id) + "/items?limit=50&additional_types=track,episode",
+          empty: "This playlist is empty." };
+        v.tap = function (t, i) { playContext(o.uri, { position: i }, false); };
+        // Spotify only lists the songs of playlists you own or collaborate on (Feb 2026); others still play.
+        v.on403 = function () { return msg("Spotify only lists the songs of playlists you made or collaborate on.", { sub: "Tap Play to listen to it anyway." }); };
+        show(v, true);
+      } else if (o.type === "album") {
+        var a = { kind: "album", uri: o.uri, title: o.name, sub: o.sub, img: o.img, layout: "rows",
+          path: "/albums/" + encodeURIComponent(o.id) + "/tracks?limit=50", empty: "No tracks." };
+        a.tap = function (t, i) { playContext(o.uri, { position: i }, false); };
+        show(a, true);
+      } else if (o.type === "show") {
+        var s = { kind: "show", uri: o.uri, title: o.name, sub: o.sub, img: o.img, layout: "rows", watch: o.video,
+          path: "/shows/" + encodeURIComponent(o.id) + "/episodes?limit=30", empty: "No episodes." };
+        s.tap = function (ep) {
+          if (ep.video) { showEpisode(ep); return; }
+          playContext(o.uri, { uri: ep.uri }, false);
+        };
+        show(s, true);
+      } else if (o.type === "artist") {
+        // (artist top tracks were removed from the Web API; the albums + "Play" on the artist still work)
+        show({ kind: "artist", uri: o.uri, title: o.name, sub: "Artist", img: o.img, round: true, layout: "grid",
+          path: "/artists/" + encodeURIComponent(o.id) + "/albums?include_groups=album,single&limit=30", empty: "No albums." }, true);
+      } else if (o.type === "track") {
+        if (o.album) playContext(o.album, { uri: o.uri }, false); else playUris([o.uri], 0);
+      } else if (o.type === "episode") {
+        if (o.video) showEpisode(o); else playUris([o.uri], 0);
+      }
+    }
+    // video podcast episode: can play the audio here, or watch it in the Spotify app
+    function showEpisode(ep) {
+      if (view) view.scroll = body.scrollTop;
+      var v = { kind: "episode", uri: ep.uri, title: ep.name, sub: ep.sub, img: ep.img, layout: "rows", items: [ep], watch: true,
+        tap: function () { playUris([ep.uri], 0); } };
+      seq++; stack.push(view); view = v; loading = false; paint();
+    }
+
+    /* ---------- search (tracks, artists, albums, playlists, podcasts) ---------- */
+    var SEARCH_TYPES = [["track", "Songs"], ["artist", "Artists"], ["album", "Albums"], ["playlist", "Playlists"], ["show", "Podcasts"]];
+    function search(q) {
+      q = String(q || "").replace(/\s+/g, " ").replace(/^ | $/g, "");
+      if (!q) return;
+      if (view && view.kind !== "search") view.scroll = body.scrollTop;
+      var v = { kind: "search", q: q, title: "Results for \u201c" + q + "\u201d", layout: "search", items: [], sections: null };
+      if (view && view.kind !== "search") stack.push(view);
+      seq++; view = v; loading = true;
+      paint();
+      var my = seq;
+      // (Search returns at most 10 of each type since Feb 2026)
+      api("GET", "/search?q=" + encodeURIComponent(q) + "&type=track,artist,album,playlist,show&limit=10", undefined, function (err, data) {
+        if (my !== seq) return;
+        loading = false;
+        if (err) { v.error = loadError(err, function () { stack.length && stack.pop(); search(q); }); paint(); return; }
+        v.sections = [];
+        each(SEARCH_TYPES, function (st) {
+          var page = data && data[st[0] + "s"], list = [];
+          each(page && page.items, function (x) { var o = norm(x); if (o) list.push(o); });
+          if (list.length) v.sections.push({ type: st[0], label: st[1], items: list });
+        });
+        paint();
+      });
+    }
+    function paintSearch() {
+      var v = view;
+      if (loading) { body.appendChild(el("div", "spb-loading", "Searching…")); return; }
+      if (!v.sections || !v.sections.length) { body.appendChild(msg("No results", { sub: "Try different words." })); return; }
+      each(v.sections, function (sec) {
+        var box = el("div", "spb-section");
+        box.setAttribute("data-type", sec.type);
+        box.appendChild(el("div", "spb-section-title", sec.label));
+        var list = el("div", sec.type === "track" ? "spb-rows" : "spb-shelf");
+        each(sec.type === "track" ? sec.items.slice(0, 5) : sec.items, function (o, i) {
+          list.appendChild(sec.type === "track" ? row(o, i, open) : card(o, open));
+        });
+        box.appendChild(list);
+        body.appendChild(box);
+      });
+      markPlaying();
+    }
+
+    /* ---------- playback (on the active device, else the tablet's Spotify app) ---------- */
+    function pickDevice(list) {
+      var want = String(CFG.SPOTIFY_DEVICE_NAME || "").toLowerCase(), i, d;
+      var ok = []; each(list, function (x) { if (x && x.id && !x.is_restricted) ok.push(x); });
+      if (want) for (i = 0; i < ok.length; i++) if (String(ok[i].name).toLowerCase().indexOf(want) !== -1) return ok[i];
+      for (i = 0; i < ok.length; i++) if (ok[i].is_active) return ok[i];
+      for (i = 0; i < ok.length; i++) { d = ok[i]; if (/tablet/i.test(d.type)) return d; }
+      for (i = 0; i < ok.length; i++) { d = ok[i]; if (/smartphone/i.test(d.type)) return d; }
+      return ok[0] || null;
+    }
+    function hasActive() { return !!(lastState && lastState.device && lastState.device.id && lastState.device.is_active !== false); }
+
+    // body: { context_uri, offset } or { uris, offset }. Plays on the active device; with none, picks one
+    // (the tablet's own Spotify app by default) and starts there; with no device at all, shows how to fix it.
+    function startPlayback(data, shuffle) {
+      function send(deviceId) {
+        var path = "/me/player/play" + (deviceId ? "?device_id=" + encodeURIComponent(deviceId) : "");
+        api("PUT", path, data, function (err) {
+          if (err && !deviceId && (err.status === 404 || /NO_ACTIVE_DEVICE/.test(err.message + " " + err.reason))) { viaDevice(); return; }
+          if (err) { spotify.onCommandError(err); return; }
+          spotify.setMessage("");
+          // a device that was just woken up: shuffle once it's playing
+          if (shuffle && deviceId) spotify.setShuffle(true);
+          spotify.soon(700);
+        });
+      }
+      function viaDevice() {
+        api("GET", "/me/player/devices", undefined, function (err, d) {
+          if (err) { spotify.onCommandError(err); return; }
+          var dev = pickDevice(d && d.devices);
+          if (!dev) { noDevice(); return; }
+          send(dev.id);
+        });
+      }
+      if (!hasActive()) { viaDevice(); return; }
+      if (shuffle) spotify.setShuffle(true, function () { send(null); }); else send(null);
+    }
+    function playContext(uri, offset, shuffle) {
+      var data = { context_uri: uri };
+      if (offset) data.offset = offset;
+      startPlayback(data, shuffle);
+    }
+    function playUris(uris, i) { startPlayback({ uris: uris, offset: { position: i || 0 } }, false); }
+    function playList(items, i) {
+      // Liked Songs has no context URI: play the loaded songs from the tapped one (up to 100 ahead)
+      var uris = [], start = Math.max(0, i);
+      for (var k = start; k < items.length && uris.length < 100; k++) if (items[k] && items[k].uri) uris.push(items[k].uri);
+      playUris(uris, 0);
+    }
+
+    /* ---------- devices + up next (a sheet over the browse area) ---------- */
+    function openSheet(kind) {
+      sheet = kind;
+      $("spb-sheet").style.display = "";
+      setText("spb-sheet-title", kind === "devices" ? "Play on" : "Up next");
+      toggleClass($("spb-devices-btn"), "active", kind === "devices");
+      toggleClass($("spb-queue-btn"), "active", kind === "queue");
+      if (kind === "devices") loadDevices(); else loadQueue();
+    }
+    function closeSheet() {
+      sheet = "";
+      if ($("spb-sheet")) $("spb-sheet").style.display = "none";
+      toggleClass($("spb-devices-btn"), "active", false);
+      toggleClass($("spb-queue-btn"), "active", false);
+    }
+    function sheetBody() { var b = $("spb-sheet-body"); b.innerHTML = ""; return b; }
+    function deviceIcon(type) {
+      if (/speaker|avr|stb|audio/i.test(type)) return '<svg viewBox="0 0 24 24"><rect x="5.5" y="3" width="13" height="18" rx="3"/><circle cx="12" cy="14" r="3.2"/><circle cx="12" cy="7.2" r="1" class="dot"/></svg>';
+      if (/tv|cast/i.test(type)) return '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8.5 20.5h7"/></svg>';
+      if (/computer/i.test(type)) return '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2.5 19.5h19"/></svg>';
+      return '<svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>';
+    }
+    function noDeviceHelp(box) {
+      var h = el("div", "spb-nodev");
+      h.id = "spb-nodev";
+      h.appendChild(el("div", "spb-empty-title", "No Spotify device is on"));
+      h.appendChild(el("div", "spb-empty-sub", "Spotify plays through its app. Open Spotify on this tablet (or wake a speaker or phone that has it), then tap Refresh."));
+      var b = el("button", "sp-connect-btn spb-open-app", "Open Spotify app");
+      b.id = "spb-open-app";
+      b.addEventListener("click", function () { openSpotifyApp(""); setTimeout(function () { if (sheet === "devices") loadDevices(); }, 4000); });
+      h.appendChild(b);
+      var a = el("a", "spb-fallback", "Or open Spotify in the browser");
+      a.href = "https://open.spotify.com/"; a.target = "_blank"; a.rel = "noopener";
+      h.appendChild(a);
+      box.appendChild(h);
+    }
+    function loadDevices() {
+      var box = sheetBody();
+      box.appendChild(el("div", "spb-loading", "Looking for devices…"));
+      api("GET", "/me/player/devices", undefined, function (err, d) {
+        if (sheet !== "devices") return;
+        box = sheetBody();
+        if (err) { box.appendChild(loadError(err, loadDevices)); return; }
+        var list = (d && d.devices) || [];
+        if (!list.length) { noDeviceHelp(box); return; }
+        var def = pickDevice(list);
+        each(list, function (dev) {
+          var b = el("button", "spb-device" + (dev.is_active ? " active" : ""));
+          b.setAttribute("data-id", dev.id || "");
+          var ic = el("span", "spb-device-icon"); ic.innerHTML = deviceIcon(dev.type || ""); b.appendChild(ic);
+          var t = el("span", "spb-row-text");
+          t.appendChild(el("span", "spb-name", dev.name || "Device"));
+          t.appendChild(el("span", "spb-sub", dev.is_active ? "Playing here" : (dev.is_restricted ? "Can't be controlled from here" : (dev.type || "") + (def && def.id === dev.id ? " · default" : ""))));
+          b.appendChild(t);
+          if (dev.is_restricted) b.disabled = true;
+          b.addEventListener("click", function () { transfer(dev); });
+          box.appendChild(b);
+        });
+      });
+    }
+    function transfer(dev) {
+      if (!dev || !dev.id) return;
+      api("PUT", "/me/player", { device_ids: [dev.id], play: true }, function (err) {
+        if (err) { spotify.onCommandError(err); return; }
+        spotify.setMessage("");
+        closeSheet();
+        spotify.soon(900);
+      });
+    }
+    function noDevice() {
+      if (!$("spb-sheet")) return;
+      openSheet("devices");
+    }
+    function loadQueue() {
+      var box = sheetBody();
+      box.appendChild(el("div", "spb-loading", "Loading…"));
+      api("GET", "/me/player/queue", undefined, function (err, d) {
+        if (sheet !== "queue") return;
+        box = sheetBody();
+        if (err) { box.appendChild(loadError(err, loadQueue)); return; }
+        var cur = norm(d && d.currently_playing), q = [];
+        each(d && d.queue, function (x) { var o = norm(x); if (o) q.push(o); });
+        if (!cur && !q.length) { box.appendChild(msg("Nothing queued", { sub: "Play a playlist, album or podcast." })); return; }
+        if (cur) { box.appendChild(el("div", "spb-section-title", "Now playing")); var r = row(cur, 0, null); toggleClass(r, "playing", true); box.appendChild(r); }
+        if (q.length) {
+          box.appendChild(el("div", "spb-section-title", "Next"));
+          each(q.slice(0, 30), function (o, i) { box.appendChild(row(o, i, null)); });
+        }
+      });
+    }
+
+    /* ---------- wiring ---------- */
+    function onState(st, connected) {
+      lastState = st;
+      if (!connected) { started = false; closeSheet(); return; }
+      if (!started && body) { started = true; setTab(store.get("spb_tab") || "playlists"); }
+      markPlaying();
+    }
+    function init() {
+      body = $("spb-body"); head = $("spb-head");
+      if (!body) return;
+      body.addEventListener("scroll", onScroll);
+      each(document.querySelectorAll(".spb-tab"), function (b) {
+        b.addEventListener("click", function () { closeSheet(); if ($("spb-search")) $("spb-search").value = ""; setTab(b.getAttribute("data-tab")); });
+      });
+      var input = $("spb-search");
+      if (input) {
+        input.addEventListener("keydown", function (e) {
+          if (e.keyCode === 13 || e.key === "Enter") { if (e.preventDefault) e.preventDefault(); closeSheet(); search(input.value); if (input.blur) input.blur(); }
+        });
+        input.addEventListener("search", function () { if (input.value) { closeSheet(); search(input.value); } });
+      }
+      if ($("spb-devices-btn")) $("spb-devices-btn").addEventListener("click", function () { if (sheet === "devices") closeSheet(); else openSheet("devices"); });
+      if ($("spb-queue-btn")) $("spb-queue-btn").addEventListener("click", function () { if (sheet === "queue") closeSheet(); else openSheet("queue"); });
+      if ($("spb-sheet-close")) $("spb-sheet-close").addEventListener("click", closeSheet);
+      if ($("spb-sheet-refresh")) $("spb-sheet-refresh").addEventListener("click", function () { if (sheet) openSheet(sheet); });
+    }
+    return {
+      init: init, onState: onState, noDevice: noDevice, setTab: setTab, search: search, open: open,
+      openSheet: openSheet, closeSheet: closeSheet, pickDevice: pickDevice,
+      intent: spotifyIntent, view: function () { return view; }
     };
   })();
 
@@ -2883,6 +3525,7 @@
     var savedSource = store.get("activeSource");
     youtube.init();
     bluetooth.init();
+    spBrowse.init();
     var fromCallback = spotify.init();
     showMediaPanel(fromCallback ? "spotify" : (savedSource === "youtube" ? "youtube" : "spotify"));
     paintVolume();
@@ -2892,6 +3535,7 @@
   // debug/testing hook (harmless): lets tests and the console reach the media modules
   window.__dashMedia = { spotify: spotify, youtube: youtube, bluetooth: bluetooth, sha256: sha256, base64url: base64url };
   window.__dashRadar = radar;
+  window.__dashSpBrowse = spBrowse;
   window.__dashSummarizeDay = summarizeDay;
 
   /* ===== RECOVERY ===== */

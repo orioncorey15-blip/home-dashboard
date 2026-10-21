@@ -217,10 +217,10 @@
                 <div class="wx-updated" id="weather-updated">Updating…</div>
               </div>
             </div>
-            <button class="pill-btn ghost" id="weather-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>Refresh</button>
           </div>
 
           <div class="weather-main" id="weather-hero">
+            <button class="pill-btn ghost" id="weather-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>Refresh</button>
             <div class="wx-now">
               <div class="wx-now-row">
                 <div id="weather-temp">--°</div>
@@ -312,6 +312,41 @@
             </div>
             <!-- SPOTIFY (or demo controls when Spotify isn't connected) -->
             <div class="media-panel" id="spotify-panel">
+              <!-- Library / search / devices / queue (only when connected) -->
+              <div class="sp-browse" id="sp-browse" style="display:none">
+                <div class="spb-bar">
+                  <div class="spb-tabs" id="spb-tabs" role="tablist">
+                    <button class="spb-tab active" data-tab="playlists" role="tab">Playlists</button>
+                    <button class="spb-tab" data-tab="liked" role="tab">Liked Songs</button>
+                    <button class="spb-tab" data-tab="recent" role="tab">Recent</button>
+                    <button class="spb-tab" data-tab="albums" role="tab">Albums</button>
+                    <button class="spb-tab" data-tab="shows" role="tab">Podcasts</button>
+                  </div>
+                  <form class="spb-search" id="spb-search-form" action="#" onsubmit="return false">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+                    <input type="search" id="spb-search" placeholder="Search Spotify" aria-label="Search Spotify" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" enterkeyhint="search">
+                  </form>
+                  <button class="spb-tool" id="spb-queue-btn" aria-label="Up next">
+                    <svg viewBox="0 0 24 24"><path d="M4 6.5h11M4 11.5h11M4 16.5h7"/><path d="M16 15v5.5l4.5-2.75z" class="fill"/></svg>
+                  </button>
+                  <button class="spb-tool" id="spb-devices-btn" aria-label="Devices">
+                    <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="11" height="15" rx="2"/><rect x="16.5" y="9" width="4.5" height="10.5" rx="1.5"/><circle cx="9" cy="14.5" r="2"/></svg>
+                  </button>
+                </div>
+                <div class="spb-head" id="spb-head" style="display:none"></div>
+                <div class="spb-body" id="spb-body"></div>
+                <!-- device picker / up next (slide over the browse area) -->
+                <div class="spb-sheet" id="spb-sheet" style="display:none">
+                  <div class="spb-sheet-head">
+                    <div class="spb-sheet-title" id="spb-sheet-title">Devices</div>
+                    <button class="spb-tool" id="spb-sheet-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg></button>
+                    <button class="spb-tool" id="spb-sheet-close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+                  </div>
+                  <div class="spb-sheet-body" id="spb-sheet-body"></div>
+                </div>
+              </div>
+              <div class="sp-player" id="sp-player">
+              <button class="sp-full-close" id="sp-full-close" aria-label="Close full screen"><svg viewBox="0 0 24 24"><path d="M6 9.5 12 15.5 18 9.5"/></svg></button>
               <div class="album-art"><img id="sp-art" alt="" referrerpolicy="no-referrer"><span class="album-art-label">
                 <svg viewBox="0 0 24 24"><path d="M9 17.5V5.5l11-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg></span></div>
               <div class="sp-side">
@@ -336,15 +371,33 @@
                     <svg viewBox="0 0 24 24"><path d="M6.5 6v12L15 12z"/><rect x="15.6" y="6" width="2.4" height="12" rx="1"/></svg>
                   </button>
                 </div>
-                <button class="repeat-btn" id="repeat-btn" aria-label="Repeat: off">
-                  <svg viewBox="0 0 24 24"><path d="M4.5 11V9.5a3 3 0 0 1 3-3h11M15.5 3.5l3 3-3 3M19.5 13v1.5a3 3 0 0 1-3 3h-11M8.5 20.5l-3-3 3-3"/></svg>
-                  <span>Repeat</span><span class="repeat-state" id="repeat-state">Off</span>
+                <div class="sp-modes">
+                  <button class="repeat-btn shuffle-btn" id="shuffle-btn" aria-label="Shuffle: off" aria-pressed="false" style="display:none">
+                    <svg viewBox="0 0 24 24"><path d="M3.5 7h3.2c1.6 0 3 .8 3.9 2.1l3.8 5.8c.9 1.3 2.3 2.1 3.9 2.1h2.2M3.5 17h3.2c1.6 0 3-.8 3.9-2.1M14.4 9.1c.9-1.3 2.3-2.1 3.9-2.1h2.2M18 4.5 20.5 7 18 9.5M18 14.5l2.5 2.5-2.5 2.5"/></svg>
+                    <span>Shuffle</span>
+                  </button>
+                  <button class="repeat-btn" id="repeat-btn" aria-label="Repeat: off">
+                    <svg viewBox="0 0 24 24"><path d="M4.5 11V9.5a3 3 0 0 1 3-3h11M15.5 3.5l3 3-3 3M19.5 13v1.5a3 3 0 0 1-3 3h-11M8.5 20.5l-3-3 3-3"/></svg>
+                    <span>Repeat</span><span class="repeat-state" id="repeat-state">Off</span>
+                  </button>
+                </div>
+                <div class="sp-full-vol" id="sp-full-vol-wrap">
+                  <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/></svg>
+                  <input type="range" min="0" max="100" value="60" id="sp-full-vol" aria-label="Volume">
+                  <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+                </div>
+                <div class="sp-device" id="sp-device"></div>
+                <button class="sp-watch-btn" id="sp-watch" style="display:none">
+                  <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" class="fill"/></svg>
+                  Open in Spotify app to watch
                 </button>
                 <div class="sp-message" id="sp-message"></div>
                 <div class="demo-note" id="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
                 <div class="sp-account">
                   <button class="sp-connect-btn" id="sp-connect" style="display:none">Connect Spotify</button>
                 </div>
+              </div>
+              <button class="sp-full-btn" id="sp-full-btn" aria-label="Full screen player"><svg viewBox="0 0 24 24"><path d="M4 9V5.5C4 4.7 4.7 4 5.5 4H9M15 4h3.5c.8 0 1.5.7 1.5 1.5V9M20 15v3.5c0 .8-.7 1.5-1.5 1.5H15M9 20H5.5C4.7 20 4 19.3 4 18.5V15"/></svg></button>
               </div>
             </div>
 
