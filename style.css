@@ -1414,4 +1414,8 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
   .day { padding-left: 7px; padding-right: 7px; }
   .day-icon { width: 28px; height: 28px; margin: 0 4px 0 -3px; }
   .day-hi { font-size: 15px; }
+  .cal-head { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+  .cal-title { font-size: 30px; }
+  .cal-nav { -webkit-flex: 1 1 100%; flex: 1 1 100%; margin: 8px 0 0; }
+  .cal-day.today .cal-date::after { content: none; } /* no room for "Today" next to the date; the cell stays highlighted */
 }
