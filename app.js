@@ -2347,8 +2347,9 @@
 
     function setVolume(v) {
       clearTimeout(volTimer);
-      volTimer = setTimeout(function () {
+      var mine = volTimer = setTimeout(function () {
         api("PUT", "/me/player/volume?volume_percent=" + Math.round(v), undefined, function (err) {
+          if (volTimer === mine) volTimer = null; // sent: the slider follows the speaker again (e.g. changed on a phone)
           onCommandError(err);
         });
       }, 400);
