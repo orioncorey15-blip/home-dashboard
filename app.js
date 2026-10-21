@@ -3282,6 +3282,7 @@
         wakes++;
         spotify.setMessage("Waking up Spotify on the tablet…", true);
         setTimeout(function () {
+          if (stale()) return; // a newer tap during the backoff: don't open Spotify for the old one
           var f = getFully();
           try { f.startApplication(SPOTIFY_PKG); } catch (e) { giveUp(); return; }
           // Fully comes back by itself (native timer; JS timers can be throttled while in the background)
