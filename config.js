@@ -48,13 +48,16 @@ var CONFIG = {
   // Place name shown on the Weather page header (display only; the weather API never returns a location).
   LOCATION_NAME: "Ashtabula, OH",
 
-  // Weather radar: map centre (roughly the middle of Ashtabula County, ZIP 44004 - not the
-  // house itself) and zoom (7 = region, 9 = the county plus neighbours, Erie PA to Cleveland).
+  // Weather radar: map centre (roughly the middle of the county - not the house itself) and
+  // zoom (7 = region, 9 = the county plus neighbours, Erie PA to Cleveland).
   // Smaller maps (the Home preview, narrow screens) use up to one level less so Erie PA to
   // Cleveland still fits; the recenter button returns to that view.
   RADAR_LAT: 41.86,
   RADAR_LON: -80.79,
   RADAR_ZOOM: 9,
+  // Radar animation: leave unset for automatic (old/low-memory tablets show just the newest
+  // frame), or set true / false to always / never animate.
+  // RADAR_ANIMATE: true,
 
   // Bluetooth button: set to true after turning on Fully Kiosk →
   // Settings → Web Content Settings → "Open Other URL Schemes" (free).

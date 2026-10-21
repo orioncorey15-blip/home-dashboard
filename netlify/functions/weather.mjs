@@ -1,6 +1,6 @@
 // GET /api/weather?kind=current|forecast  ->  OpenWeatherMap data (imperial units),
 // trimmed to the fields the dashboard shows (no coordinates, city id/name, etc.).
-// Env: OWM_API_KEY (secret), OWM_ZIP (e.g. 44004), optional OWM_COUNTRY (default US)
+// Env: OWM_API_KEY (secret), OWM_ZIP (5-digit US ZIP), optional OWM_COUNTRY (default US)
 import { env, json, fail, guard, upstreamJSON, upstreamError } from "../lib/util.mjs";
 
 const VARY = ["kind"];
