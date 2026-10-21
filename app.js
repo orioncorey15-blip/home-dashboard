@@ -2367,11 +2367,21 @@
     var MUSIC_STREAM = 3;
     var volBlocked = {}; // device id -> true after a 403 VOLUME_CONTROL_DISALLOW
     function fullyVolume() { var f = window.fully; return !!(f && typeof f.setAudioVolume === "function"); }
+    // Is Spotify playing on this tablet (so its media volume is the one to change)? A phone in the
+    // household is also a "Smartphone" with supports_volume false, so a Smartphone only counts when its
+    // Spotify name matches the Android device name/model Fully reports (or SPOTIFY_DEVICE_NAME).
     function isThisTablet(dev) {
       if (!dev) return true;
+      var name = String(dev.name || "").toLowerCase();
       var want = String(CFG.SPOTIFY_DEVICE_NAME || "").toLowerCase();
-      if (want) return String(dev.name || "").toLowerCase().indexOf(want) !== -1;
-      return /tablet|smartphone/i.test(String(dev.type || ""));
+      if (want) return name.indexOf(want) !== -1;
+      if (/tablet/i.test(String(dev.type || ""))) return true;
+      if (!/smartphone/i.test(String(dev.type || ""))) return false;
+      var f = window.fully, mine = [];
+      try { mine.push(String(f.getDeviceName() || "").toLowerCase()); } catch (e) { /* not available */ }
+      try { mine.push(String(f.getDeviceModel() || "").toLowerCase()); } catch (e) { /* not available */ }
+      for (var i = 0; i < mine.length; i++) if (mine[i] && name && (name.indexOf(mine[i]) !== -1 || mine[i].indexOf(name) !== -1)) return true;
+      return false;
     }
     // (a device's id can be null in Spotify's answer; then the volume goes to the active device without device_id)
     function devKey(dev) { return (dev && (dev.id || dev.name)) || "?"; }
