@@ -2964,7 +2964,11 @@
         // Liked Songs has no context URI the Web API accepts: play a list of song URIs (see playList)
         v.title = "Liked Songs"; v.sub = "Your liked songs";
         v.tap = function (o, i) { playList(v.items, i, false); };
-        v.playAll = function (shuffle) { playList(v.items, 0, shuffle); };
+        v.playAll = function (shuffle) {
+          // start at the first song that can play (the newest liked one may be a local file or unavailable)
+          var k = 0; while (k < v.items.length - 1 && !playable(v.items[k])) k++;
+          playList(v.items, k, shuffle);
+        };
       }
       if (t === "recent") v.tap = function (o) {
         // Spotify only takes an offset for albums and playlists; anything else plays just that song
