@@ -169,6 +169,7 @@
     // Show a photo right away when arriving at a page that has a slideshow,
     // then let the (single) slideshow timer take over.
     slideshow.onPageChange();
+    if (pageId === "home") fitToday();
     if (typeof spotify !== "undefined" && spotify) spotify.onPageChange();
     setText("page-title", PAGE_TITLES[pageId] || "");
     if (typeof radar !== "undefined" && radar) radar.onPageChange();
@@ -305,7 +306,6 @@
 
   function setNight(on) {
     toggleClass(document.body, "night", on);
-    setText("night-label", on ? "On" : "Off");
     toggleClass(nightBtn, "on", on);
     if (nightBtn) nightBtn.setAttribute("aria-checked", on ? "true" : "false");
     if (typeof radar !== "undefined" && radar) radar.schedule(); // stop/restart the radar loop
@@ -486,6 +486,7 @@
     setText("home-hilo", hl);
     setText("weather-hilo", hl);
     renderOutlook();
+    renderHourly();
   }
 
   /*
@@ -585,35 +586,50 @@
     return { kind: kind, label: SKY_LABEL[score] };
   }
 
+  // Hourly strip: a "Now" tile from the CURRENT conditions, then the next forecast slots.
+  function hourTile(cls, label, kind, temp, pop) {
+    var box = el("div", "hour" + (cls ? " " + cls : ""));
+    box.appendChild(el("div", "hour-time", label));
+    var ic = el("div", "wx-icon hour-icon");
+    if (WX) ic.innerHTML = WX.svg(kind, false);
+    box.appendChild(ic);
+    box.appendChild(el("div", "hour-temp", deg(temp)));
+    var pct = Math.round((pop || 0) * 100);
+    var p = el("div", "hour-pop" + (pct >= 30 ? " wet" : pct >= 10 ? "" : " dry"));
+    p.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0 0 12 0C18 10.1 12 3.5 12 3.5z"/></svg>';
+    p.appendChild(document.createTextNode(pct + "%"));
+    box.appendChild(p);
+    return box;
+  }
+  function renderHourly() {
+    var hourly = $("hourly");
+    if (!hourly) return;
+    var now = Date.now();
+    var list = ((lastForecast && lastForecast.list) || []).filter(function (f) { return f.dt * 1000 > now; });
+    var hf = document.createDocumentFragment(), n = 0;
+    if (lastCurrent && lastCurrent.main) {
+      // rain chance for "now" = the chance in the forecast slot we're in (or the next one)
+      var cur = ((lastForecast && lastForecast.list) || []).filter(function (f) { return f.dt * 1000 > now - 3 * 3600000; })[0];
+      hf.appendChild(hourTile("first now", "Now", wxKind(lastCurrent), lastCurrent.main.temp, cur ? cur.pop : 0));
+      n = 1;
+    }
+    each(list.slice(0, 8 - n), function (f, i) {
+      var d = new Date(f.dt * 1000);
+      hf.appendChild(hourTile(!n && i === 0 ? "first" : "", d.toLocaleString("en-US", { hour: "numeric", hour12: true }), wxKind(f), f.main && f.main.temp, f.pop));
+    });
+    hourly.innerHTML = "";
+    hourly.appendChild(hf);
+  }
+
   function renderForecast(forecast) {
     lastForecast = forecast;
     var list = (forecast && forecast.list) || [];
-    var hourly = $("hourly");
     var daily = $("daily");
     var hl = todayHiLo();
     setText("home-hilo", hl);
     setText("weather-hilo", hl);
 
-    if (hourly) {
-      var hf = document.createDocumentFragment();
-      list.slice(0, 8).forEach(function (f, i) {
-        var d = new Date(f.dt * 1000);
-        var box = el("div", "hour" + (i === 0 ? " first" : ""));
-        box.appendChild(el("div", "hour-time", i === 0 && d.getTime() - Date.now() < 90 * 60000 ? "Now" : d.toLocaleString("en-US", { hour: "numeric", hour12: true })));
-        var ic = el("div", "wx-icon hour-icon");
-        if (WX) ic.innerHTML = WX.svg(wxKind(f), false);
-        box.appendChild(ic);
-        box.appendChild(el("div", "hour-temp", deg(f.main && f.main.temp)));
-        var pct = Math.round((f.pop || 0) * 100);
-        var p = el("div", "hour-pop" + (pct >= 30 ? " wet" : pct >= 10 ? "" : " dry"));
-        p.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0 0 12 0C18 10.1 12 3.5 12 3.5z"/></svg>';
-        p.appendChild(document.createTextNode(pct + "%"));
-        box.appendChild(p);
-        hf.appendChild(box);
-      });
-      hourly.innerHTML = "";
-      hourly.appendChild(hf);
-    }
+    renderHourly();
 
     if (daily) {
       var days = [];
@@ -642,23 +658,27 @@
         var sum = summarizeDay(d.slots);
         var box = el("div", "day");
         box.setAttribute("title", sum.label);
-        box.appendChild(el("div", "day-name", dayKey(d.date) === todayK ? "Today" : d.date.toLocaleDateString([], { weekday: "short" })));
+        var pop = popText(d.pop), inch = d.precip / 25.4;
+        var head = el("div", "day-head");
+        head.appendChild(el("span", "day-name", dayKey(d.date) === todayK ? "Today" : d.date.toLocaleDateString([], { weekday: "short" })));
+        head.appendChild(el("span", "day-pop" + (pop ? "" : " dry"), pop || "Dry"));
+        box.appendChild(head);
+        var mid = el("div", "day-mid");
         var ic = el("div", "wx-icon day-icon");
         if (WX) ic.innerHTML = WX.svg(sum.kind, false);
-        box.appendChild(ic);
-        box.appendChild(el("div", "day-desc", sum.label));
+        mid.appendChild(ic);
         var temps = el("div", "day-temps");
         temps.appendChild(el("span", "day-hi", Math.round(hi) + "°"));
         temps.appendChild(el("span", "day-lo", Math.round(lo) + "°"));
-        box.appendChild(temps);
+        mid.appendChild(temps);
+        box.appendChild(mid);
         var bar = el("div", "range");
         var fill = el("i");
         fill.style.left = Math.round((lo - gMin) / span * 100) + "%";
         fill.style.width = Math.max(8, Math.round((hi - lo) / span * 100)) + "%";
         bar.appendChild(fill);
         box.appendChild(bar);
-        var pop = popText(d.pop), inch = d.precip / 25.4;
-        box.appendChild(el("div", "day-pop" + (pop ? "" : " dry"), pop ? pop + (inch >= 0.01 ? " · " + inch.toFixed(2) + '"' : "") : "Dry"));
+        box.appendChild(el("div", "day-desc", sum.label + (pop && inch >= 0.01 ? " · " + inch.toFixed(2) + '"' : "")));
         df.appendChild(box);
       });
       daily.innerHTML = "";
@@ -750,10 +770,12 @@
     var HAS_L = typeof window.L !== "undefined" && !!window.L.map;
     // Old/low-memory tablets: show only the newest radar frame (1 tile layer per map instead of 12)
     // and don't animate. CONFIG.RADAR_ANIMATE: true = always animate, false = never, unset = auto.
+    // Auto only catches genuinely low-end devices: about 1 GB of RAM or less (deviceMemory rounds a
+    // 3 GB tablet down to 2, so 2 is NOT low-end), or a screen of 1024 physical pixels or less.
     var LITE = CFG.RADAR_ANIMATE === false || (CFG.RADAR_ANIMATE !== true && lowEndDevice());
     function lowEndDevice() {
       var mem = navigator.deviceMemory;
-      if (num(mem) && mem <= 2) return true;
+      if (num(mem) && mem < 2) return true;
       var s = window.screen || {}, px = Math.max(s.width || 0, s.height || 0) * (window.devicePixelRatio || 1);
       return px > 0 && px <= 1024; // e.g. the old 1024x600 tablet
     }
@@ -799,7 +821,15 @@
       if (box) each(box.childNodes, function (t, i) { t.className = i === idx ? "on" : (i < idx ? "past" : ""); });
       var label = frameLabel(frames[idx]);
       setText("radar-time", label);
-      setText("home-radar-time", frames.length ? frameLabel(frames[frames.length - 1]) : "");
+      paintRadarUpdated();
+    }
+    // card footer: "Live Radar - Updated N min ago" (age of the newest frame)
+    var framesAt = 0;
+    function paintRadarUpdated() {
+      if (!frames.length) return;
+      var t = frames[frames.length - 1].time || framesAt || Date.now();
+      var mins = Math.max(0, Math.floor((Date.now() - t) / 60000));
+      setText("radar-updated", mins < 1 ? "Updated just now" : mins < 120 ? "Updated " + mins + " min ago" : "Updated " + fmtTime(new Date(t)));
     }
 
     function buildRadarLayers(m) {
@@ -848,6 +878,7 @@
           frames.push({ url: data.host + p.path + "/256/{z}/{x}/{y}/2/1_1.png", time: (p.time || 0) * 1000, mins: 0 });
         });
         idx = frames.length - 1;
+        framesAt = Date.now();
         for (var k in maps) if (maps.hasOwnProperty(k)) { maps[k].loaded = 0; maps[k].errors = 0; buildRadarLayers(maps[k]); }
         drawTicks();
       });
@@ -910,7 +941,6 @@
     function visibleMaps() {
       var out = [];
       if (currentPage === "weather" && maps.full) out.push(maps.full);
-      if (currentPage === "home" && maps.mini) out.push(maps.mini);
       return out;
     }
 
@@ -956,6 +986,7 @@
       if (provider === "iem") {
         fetchValidTime(function () {
           frames = iemFrames();
+          framesAt = Date.now();
           for (var k in maps) {
             if (!maps.hasOwnProperty(k)) continue;
             each(maps[k].layers, function (l, i) { if (frames[i]) l.setUrl(frames[i].url); });
@@ -972,18 +1003,19 @@
       if (!startedAt) {
         startedAt = Date.now();
         frames = iemFrames();
+        framesAt = Date.now();
         idx = frames.length - 1;
         drawTicks();
+        setInterval(function () { if (currentPage === "weather") paintRadarUpdated(); }, 30000);
         fetchValidTime(function () { frames = iemFrames(); paintTicks(); });
         refreshTimer = setInterval(function () { if (!isHidden()) refresh(); }, 5 * 60 * 1000);
         // nothing loaded after 20 s: say so (offline or blocked)
         setTimeout(function () {
           var any = 0;
           for (var k in maps) if (maps.hasOwnProperty(k)) any += maps[k].loaded;
-          if (!any && (maps.full || maps.mini)) checkHealth();
+          if (!any && maps.full) checkHealth();
         }, 20000);
       }
-      if (currentPage === "home") makeMap("mini", "home-radar-map", false, ZOOM);
       if (currentPage === "weather") makeMap("full", "radar-container", true, ZOOM);
     }
 
@@ -998,7 +1030,7 @@
 
     function onPageChange() {
       if (currentPage !== "weather") expand(false);
-      if (!startedAt && currentPage !== "home" && currentPage !== "weather") return;
+      if (!startedAt && currentPage !== "weather") return; // the radar starts the first time Weather opens
       ensure();
       var vis = visibleMaps();
       // maps created (or resized) while hidden need their size re-measured
@@ -1007,6 +1039,7 @@
     }
 
     function init() {
+      // Home weather card: small "Radar" button opens the full radar on the Weather page
       if ($("home-radar")) $("home-radar").addEventListener("click", function (e) {
         if (e.stopPropagation) e.stopPropagation();
         showPage("weather");
@@ -1445,9 +1478,54 @@
       text.appendChild(title);
       text.appendChild(time);
       div.appendChild(text);
+      // small decorative glyph on the right, matching the category (video call, reminder, ...)
+      var act = document.createElement("span");
+      act.className = "ev-action";
+      act.setAttribute("aria-hidden", "true");
+      act.innerHTML = '<svg viewBox="0 0 24 24">' + (ACTION_ICONS[cat.key] || ACTION_ICONS.event) + "</svg>";
+      div.appendChild(act);
       container.appendChild(div);
     });
+    fitToday();
   }
+
+  /*
+   * Today's card never cuts a row in half: "Coming up" rows go first, then today's last rows
+   * are folded into a "+N more" row (tap opens the calendar).
+   */
+  function fitToday() {
+    var sc = $("today-scroll"), list = $("today-events");
+    if (!sc || !list || !sc.clientHeight) return;
+    var more = $("today-more");
+    if (more) more.parentNode.removeChild(more);
+    var rows = list.querySelectorAll(".today-event"), ups = document.querySelectorAll("#upcoming-events .up-event"), i;
+    for (i = 0; i < rows.length; i++) rows[i].style.display = "";
+    for (i = 0; i < ups.length; i++) ups[i].style.display = "";
+    var up = $("upcoming");
+    if (up) up.style.display = "";
+    function over() { return sc.scrollHeight > sc.clientHeight + 1; }
+    for (i = ups.length - 1; i >= 0 && over(); i--) {
+      ups[i].style.display = "none";
+      if (i === 0 && up) up.style.display = "none";
+    }
+    if (!over() || rows.length < 2) return;
+    more = document.createElement("button");
+    more.id = "today-more";
+    more.className = "today-more";
+    list.appendChild(more);
+    var hidden = 0;
+    for (i = rows.length - 1; i > 0 && over(); i--) {
+      rows[i].style.display = "none";
+      hidden++;
+      more.textContent = "+" + hidden + " more today";
+    }
+    if (!hidden) more.parentNode.removeChild(more);
+  }
+  window.addEventListener("resize", function () { if (currentPage === "home") fitToday(); });
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    if (t && t.id === "today-more") showPage("calendar");
+  });
 
   /*
    * A colour + icon per event, guessed from its title (Google Calendar's API doesn't give
@@ -1455,8 +1533,9 @@
    */
   var CAT_RULES = [
     ["celebrate", "Celebration", /birthday|b-?day|anniversary|party|wedding|shower/i],
-    ["home", "Home", /trash|garbage|recycl|grocer|errand|clean|laundry|\bbills?\b|\bpay\b|repair|plumber|delivery/i],
-    ["family", "Kids", /\bkids?\b|daycare|school|class|pick ?up|drop ?off|\bpta\b|teacher|practice|recital|camp|play ?date/i],
+    ["family", "Kids", /\bkids?\b|daycare|school|class|\bpta\b|teacher|practice|recital|camp|play ?date/i],
+    ["errands", "Errands", /grocer|errand|dry ?clean|laundry|pick ?up|drop ?off|delivery|store|shopping|pharmacy|post office/i],
+    ["home", "Home", /trash|garbage|recycl|clean|\bbills?\b|\bpay\b|repair|plumber|yard|mow/i],
     ["health", "Health", /doctor|dentist|\bdr\.?\s|appt|appointment|clinic|\bvet\b|therapy|check-?up|pediatric|ortho/i],
     ["work", "Work", /work|meeting|stand-?up|\bsync\b|interview|office|shift|conference|\bcall\b/i],
     ["social", "Social", /dinner|lunch|brunch|breakfast|movie|game|concert|date night|church|visit/i],
@@ -1465,13 +1544,27 @@
   var CAT_ICONS = {
     holiday: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
     celebrate: '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M4 13h16M12 9v11M12 9c-1.5-3.5-5-4-5-1.5S10 9 12 9zm0 0c1.5-3.5 5-4 5-1.5S14 9 12 9z"/>',
-    family: '<path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2c0 .4.3.8.8.8H10v-5.5h4V20h3.7c.5 0 .8-.4.8-.8V9"/>',
+    family: '<circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c0-3.2 2.5-5.5 5.5-5.5s5.5 2.3 5.5 5.5"/><circle cx="17" cy="9.5" r="2.3"/><path d="M15.8 14.3c2.6-.3 4.7 1.6 4.7 4.4"/>',
     health: '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/>',
     work: '<rect x="3.5" y="7.5" width="17" height="12" rx="2.5"/><path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3.5 12.5h17"/>',
-    social: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
-    home: '<path d="M6 7h12l-1 13H7zM4.5 7h15M10 7V4.5h4V7"/>',
+    social: '<path d="M7 4.5h10l-1 6.5a4 4 0 0 1-8 0zM12 15v4.5M8.5 19.5h7"/>',
+    home: '<path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2c0 .4.3.8.8.8H10v-5.5h4V20h3.7c.5 0 .8-.4.8-.8V9"/>',
+    errands: '<path d="M5.5 8h13l-1 12h-11z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>',
     travel: '<path d="M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5V17l7.5-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-4.5L21 17z"/>',
     event: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'
+  };
+  // right-hand glyphs (decorative): what the event is likely to need
+  var ACTION_ICONS = {
+    work: '<rect x="3" y="7" width="12.5" height="10" rx="2.5"/><path d="m15.5 11 5-3v8l-5-3z"/>',
+    errands: '<path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14zM10 20.5a2 2 0 0 0 4 0"/>',
+    home: '<path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14zM10 20.5a2 2 0 0 0 4 0"/>',
+    family: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><circle cx="17" cy="9.5" r="2.3"/><path d="M15.8 14.2c2.6-.3 4.7 1.6 4.7 4.4"/>',
+    social: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
+    celebrate: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
+    holiday: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
+    health: '<path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14zM10 20.5a2 2 0 0 0 4 0"/>',
+    travel: '<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>',
+    event: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
   };
   function eventCategory(ev) {
     if (isHolidayEvent(ev)) return { key: "holiday", label: "Holiday" };
@@ -1561,8 +1654,18 @@
         if (page === "home") homeImg.style.opacity = "1";
         var bg = $("photo-frame-bg");
         if (page === "photos" && bg && frameImg.src) bg.style.backgroundImage = 'url("' + frameImg.src.replace(/["\\]/g, "") + '")';
+        if (page === "photos") fitFrame();
       };
     }
+    // Photos page: a photo whose shape is close to the screen's fills it (no thin bars at the edges);
+    // a very different shape (e.g. portrait on a landscape screen) is shown whole on the blurred backdrop.
+    function fitFrame() {
+      var pg = $("photos");
+      if (!frameImg || !pg || !frameImg.naturalWidth || !pg.clientHeight) return;
+      var r = frameImg.naturalWidth / frameImg.naturalHeight, f = pg.clientWidth / pg.clientHeight;
+      toggleClass(frameImg, "fill", Math.abs(r / f - 1) <= 0.15);
+    }
+    window.addEventListener("resize", fitFrame);
     function handleError(page) {
       return function () {
         var s = state[page];
@@ -2015,7 +2118,9 @@
     var CLIENT_ID = String(CFG.SPOTIFY_CLIENT_ID || "");
     var ACCOUNTS = "https://accounts.spotify.com";
     var API = "https://api.spotify.com/v1";
-    var SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+    // Everything the player + library/browse pages need (read-only library access, playback control).
+    var SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state " +
+      "user-library-read playlist-read-private playlist-read-collaborative user-read-recently-played";
     var FAST_MS = 5000, SLOW_MS = 30000, IDLE_MS = 60000;
     var CAN_USE = !IS_FILE && !!CLIENT_ID && !!window.btoa;
 
@@ -2028,8 +2133,10 @@
 
     function redirectUri() {
       if (CFG.SPOTIFY_REDIRECT_URI) return String(CFG.SPOTIFY_REDIRECT_URI);
+      // the dashboard's folder (drop "index.html" or "spotify-callback"), so on the Netlify sites this
+      // is exactly https://<host>/spotify-callback, the URI registered in the Spotify app
       var base = window.location.protocol + "//" + window.location.host +
-        window.location.pathname.replace(/[^/]*$/, "");
+        window.location.pathname.replace(/spotify-callback\/?$/, "").replace(/[^/]*$/, "");
       return base + "spotify-callback";
     }
     function connected() { return CAN_USE && !!store.get("sp_refresh"); }
@@ -2269,9 +2376,10 @@
 
     function render() {
       var on = connected();
-      var connectBtn = $("sp-connect"), discBtn = $("sp-disconnect"), note = $("demo-note");
+      var connectBtn = $("sp-connect"), menu = $("sp-menu-wrap"), note = $("demo-note");
       if (connectBtn) connectBtn.style.display = (!on && CAN_USE) ? "" : "none";
-      if (discBtn) discBtn.style.display = on ? "" : "none";
+      if (menu) menu.style.display = on ? "" : "none";
+      if (!on) showMenu(false);
       if (note) note.style.display = on ? "none" : "";
       var wrap = $("sp-progress-wrap");
       var art = $("sp-art");
@@ -2282,6 +2390,7 @@
         setText("sp-pos", "0:00"); setText("sp-dur", "0:00");
         if ($("sp-progress-bar")) $("sp-progress-bar").style.width = "0%";
         if (art) { art.removeAttribute("src"); art.style.display = "none"; }
+        toggleClass(art && art.parentNode, "has-art", false);
         updateNowPlaying();
         return;
       }
@@ -2298,6 +2407,8 @@
       if (art) {
         if (src) { if (art.getAttribute("src") !== src) art.setAttribute("src", src); art.style.display = "block"; }
         else { art.removeAttribute("src"); art.style.display = "none"; }
+        // the music-note placeholder only shows while there's no cover art
+        toggleClass(art.parentNode, "has-art", !!src);
       }
       if (wrap) wrap.style.display = "";
       if (state && state.repeat_state) paintRepeat(state.repeat_state);
@@ -2311,6 +2422,12 @@
       }
       updateNowPlaying();
       tick();
+    }
+
+    function showMenu(on) {
+      var m = $("sp-menu"), b = $("sp-menu-btn");
+      if (m) m.style.display = on ? "" : "none";
+      if (b) b.setAttribute("aria-expanded", on ? "true" : "false");
     }
 
     function info() {
@@ -2337,7 +2454,17 @@
 
     function init() {
       if ($("sp-connect")) $("sp-connect").addEventListener("click", login);
+      if ($("sp-menu-btn")) $("sp-menu-btn").addEventListener("click", function (e) {
+        if (e.stopPropagation) e.stopPropagation();
+        showMenu($("sp-menu").style.display === "none");
+      });
+      document.addEventListener("click", function (e) {
+        var m = $("sp-menu");
+        if (m && m.style.display !== "none" && !m.contains(e.target)) showMenu(false);
+      });
+      if ($("sp-art")) $("sp-art").addEventListener("error", function () { toggleClass(this.parentNode, "has-art", false); this.style.display = "none"; });
       if ($("sp-disconnect")) $("sp-disconnect").addEventListener("click", function () {
+        showMenu(false);
         forget();
         setMessage("Spotify disconnected.");
         clearTimeout(pollTimer);
@@ -2510,6 +2637,7 @@
     function showResults(on) {
       var r = $("yt-results");
       if (r) r.style.display = on ? "" : "none";
+      if (on) fitGrid();
       toggleClass($("yt-wrap"), "show-results", !!on);
       var o = $("yt-results-open");
       if (o) o.style.display = (!on && lastResults && lastResults.length) ? "" : "none";
@@ -2556,7 +2684,36 @@
       });
       grid.appendChild(frag);
       grid.scrollTop = 0;
+      fitGrid();
     }
+
+    /*
+     * Pick the column count (tiles at least 130px wide) whose rows fill the results area best,
+     * and size the grid to whole rows, so no row is shown cut in half (more rows scroll).
+     */
+    var GAP = 14, TEXT_H = 63; // title (2 lines) + channel + margins under each thumbnail
+    function fitGrid() {
+      var grid = $("yt-results-grid"), box = $("yt-results");
+      if (!grid || !box || box.style.display === "none") return;
+      grid.style.height = ""; grid.style.gridAutoRows = ""; grid.style.webkitFlex = ""; grid.style.flex = ""; grid.style.gridTemplateColumns = "";
+      var W = grid.clientWidth - 24, H = grid.clientHeight - 20;
+      if (W <= 0 || H <= 0) return;
+      var best = null;
+      for (var c = 3; c <= 6; c++) {
+        var w = (W - (c - 1) * GAP) / c;
+        if (w < 130) break;
+        var rh = w * 0.5625 + TEXT_H, r = Math.floor((H + GAP) / (rh + GAP));
+        if (r < 1) continue;
+        var left = H - (r * rh + (r - 1) * GAP);
+        if (!best || left < best.left - 4) best = { c: c, r: r, rh: rh, left: left };
+      }
+      if (!best) return;
+      grid.style.gridTemplateColumns = "repeat(" + best.c + ", minmax(0, 1fr))";
+      grid.style.webkitFlex = "0 0 auto"; grid.style.flex = "0 0 auto";
+      grid.style.gridAutoRows = Math.ceil(best.rh) + "px";
+      grid.style.height = Math.ceil(best.r * Math.ceil(best.rh) + (best.r - 1) * GAP + 20) + "px";
+    }
+    window.addEventListener("resize", function () { if (currentPage === "media") fitGrid(); });
 
     function searchError(err) {
       var m = String((err && err.message) || "");

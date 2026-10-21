@@ -29,10 +29,11 @@ var CONFIG = {
 
   // Spotify: the Client ID of your Spotify developer app (not a secret).
   // Leave empty to keep the demo media controls. See README → "Spotify".
-  SPOTIFY_CLIENT_ID: "",
+  SPOTIFY_CLIENT_ID: "5f41fa0dba664f37bbd82df44be3f87a",
   // Redirect URI: leave empty to use this site's address + /spotify-callback.
-  // On the production site that is https://homedashboard8080.netlify.app/spotify-callback,
-  // which must be the Redirect URI registered in the Spotify developer app.
+  // Registered in the Spotify app (must match exactly, no trailing slash):
+  //   https://homedashboard8080.netlify.app/spotify-callback
+  //   https://ui-revamp--homedashboard8080.netlify.app/spotify-callback
   // Only set this if the dashboard is opened from a different address (e.g. a custom domain).
   SPOTIFY_REDIRECT_URI: "",
 
@@ -55,9 +56,10 @@ var CONFIG = {
   RADAR_LAT: 41.86,
   RADAR_LON: -80.79,
   RADAR_ZOOM: 9,
-  // Radar animation: leave unset for automatic (old/low-memory tablets show just the newest
-  // frame), or set true / false to always / never animate.
-  // RADAR_ANIMATE: true,
+  // Radar animation: true = always animate (the Galaxy Tab A8 handles it fine), false = only
+  // the newest frame (for a very old / low-memory tablet). Remove the line for automatic
+  // (single frame only on about 1 GB RAM or a screen of 1024 px or less).
+  RADAR_ANIMATE: true,
 
   // Bluetooth button: set to true after turning on Fully Kiosk →
   // Settings → Web Content Settings → "Open Other URL Schemes" (free).

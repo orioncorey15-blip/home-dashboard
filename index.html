@@ -45,7 +45,6 @@
 
   <div id="container">
     <nav id="sidebar" aria-label="Pages">
-      <div class="nav-brand" aria-hidden="true"><span></span></div>
       <button class="nav-btn active" data-page="home" aria-label="Home">
         <svg viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2c0 .4.3.8.8.8H10v-5.5h4V20h3.7c.5 0 .8-.4.8-.8V9"/></svg>
         <span class="nav-label">Home</span>
@@ -111,10 +110,8 @@
                   <div><span class="ms-label">Sunset</span><span class="ms-value" id="home-sunset">--</span></div>
                 </div>
               </div>
-              <button class="home-radar" id="home-radar" aria-label="Open the full weather radar">
-                <div class="radar-map" id="home-radar-map"></div>
-                <div class="home-radar-label"><span class="live-dot"></span>Radar<span class="home-radar-time" id="home-radar-time"></span></div>
-                <div class="home-radar-open">View full radar</div>
+<button class="card-link home-radar-btn" id="home-radar" aria-label="Open the full weather radar">
+                <svg viewBox="0 0 24 24" class="radar-glyph"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12 18 6"/></svg>Radar<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
               </button>
             </div>
 
@@ -123,7 +120,7 @@
                 <svg viewBox="0 0 24 24" class="ct-icon"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
                 <span>Today's events</span><span class="ct-right" id="today-date"></span>
               </div>
-              <div class="today-scroll">
+              <div class="today-scroll" id="today-scroll">
                 <div id="today-events" class="today-events"></div>
                 <div class="upcoming" id="upcoming">
                   <div class="eyebrow">Coming up</div>
@@ -180,7 +177,7 @@
               <div class="night-row">
                 <svg viewBox="0 0 24 24" class="night-moon"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
                 <div class="night-text">
-                  <div class="night-title">Night Mode <span class="night-state" id="night-label">Off</span></div>
+                  <div class="night-title">Night Mode</div>
                   <div class="night-sub">Dims the screen for the night</div>
                 </div>
                 <button id="night-toggle" class="switch" role="switch" aria-checked="false" aria-label="Night mode"><span class="knob"></span></button>
@@ -210,28 +207,28 @@
 
       <!-- WEATHER -->
       <section class="page" id="weather">
+        <div class="wx-wash wx-glow" aria-hidden="true"></div>
         <div class="weather-layout">
-          <div class="card weather-main wx-card" id="weather-hero">
-            <div class="wx-wash" aria-hidden="true"></div>
-            <div class="wx-top">
-              <div class="wx-place">
-                <svg viewBox="0 0 24 24" class="wx-pin"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
-                <div>
-                  <div class="wx-place-name" id="weather-place"></div>
-                  <div class="wx-updated" id="weather-updated">Updating…</div>
-                </div>
+          <div class="wx-top">
+            <div class="wx-place">
+              <svg viewBox="0 0 24 24" class="wx-pin"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
+              <div>
+                <div class="wx-place-name" id="weather-place"></div>
+                <div class="wx-updated" id="weather-updated">Updating…</div>
               </div>
-              <button class="pill-btn" id="weather-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>Refresh</button>
             </div>
+            <button class="pill-btn ghost" id="weather-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg>Refresh</button>
+          </div>
 
+          <div class="weather-main" id="weather-hero">
             <div class="wx-now">
-              <div class="wx-now-text">
+              <div class="wx-now-row">
                 <div id="weather-temp">--°</div>
-                <div id="weather-desc">Loading…</div>
-                <div class="wx-outlook" id="weather-outlook"></div>
-                <div class="weather-sub"><span id="weather-hilo"></span><span class="wx-sun">Sunrise <b id="weather-sunrise">--</b> · Sunset <b id="weather-sunset">--</b></span></div>
+                <div class="wx-icon weather-icon" id="weather-icon"></div>
               </div>
-              <div class="wx-icon weather-icon" id="weather-icon"></div>
+              <div id="weather-desc">Loading…</div>
+              <div class="wx-outlook" id="weather-outlook"></div>
+              <div class="weather-sub"><span id="weather-hilo"></span><span class="wx-sun">Sunrise <b id="weather-sunrise">--</b> · Sunset <b id="weather-sunset">--</b></span></div>
             </div>
 
             <div class="wx-stats">
@@ -253,7 +250,7 @@
               </div>
             </div>
 
-            <div class="wx-section">
+            <div class="wx-section wx-hourly">
               <div class="section-head">
                 <h2><svg viewBox="0 0 24 24" class="sh-icon"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>Hourly forecast</h2>
                 <span class="section-note">Next 24 hours</span>
@@ -262,7 +259,7 @@
               <div id="hourly" class="hourly-row"></div>
             </div>
 
-            <div class="wx-section">
+            <div class="wx-section wx-daily">
               <div class="section-head">
                 <h2><svg viewBox="0 0 24 24" class="sh-icon"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="daily-title">6-day forecast</span></h2>
               </div>
@@ -271,12 +268,12 @@
           </div>
 
           <div class="card weather-radar">
-            <div id="radar-container" class="radar-map"></div>
-            <div class="radar-overlay-top">
-              <div class="radar-head">
-                <div class="radar-badge"><span class="live-dot"></span>Radar</div>
-                <button class="radar-expand" id="radar-expand"><span id="radar-expand-label">View Full Radar</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
-              </div>
+            <div class="radar-card-head">
+              <span class="radar-card-title">Radar</span>
+              <button class="radar-expand" id="radar-expand"><span id="radar-expand-label">View Full Radar</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+            </div>
+            <div class="radar-body">
+              <div id="radar-container" class="radar-map"></div>
               <div class="radar-tools">
                 <button class="radar-tool" id="radar-zoom-in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
                 <button class="radar-tool" id="radar-zoom-out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
@@ -284,18 +281,18 @@
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5"/></svg>
                 </button>
               </div>
+              <div class="radar-controls">
+                <button class="radar-play" id="radar-play" aria-label="Pause radar">
+                  <svg viewBox="0 0 24 24" class="i-pause"><rect x="7" y="5.5" width="3.6" height="13" rx="1"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1"/></svg>
+                  <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+                </button>
+                <div class="radar-track"><div class="radar-ticks" id="radar-ticks"></div></div>
+                <div class="radar-time" id="radar-time">--</div>
+              </div>
+              <div class="radar-msg" id="radar-msg"></div>
             </div>
-            <div class="radar-controls">
-              <button class="radar-play" id="radar-play" aria-label="Pause radar">
-                <svg viewBox="0 0 24 24" class="i-pause"><rect x="7" y="5.5" width="3.6" height="13" rx="1"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1"/></svg>
-                <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5.5v13l10.5-6.5z"/></svg>
-              </button>
-              <div class="radar-track"><div class="radar-ticks" id="radar-ticks"></div></div>
-              <div class="radar-time" id="radar-time">--</div>
-            </div>
-            <div class="radar-msg" id="radar-msg"></div>
+            <div class="radar-foot"><span class="live-dot"></span>Live Radar <span class="radar-foot-sep">&bull;</span> <span id="radar-updated">Updating…</span></div>
           </div>
-
         </div>
       </section>
 
@@ -303,6 +300,16 @@
       <section class="page" id="media">
         <div class="media-layout">
           <div class="card media-nowplaying">
+            <!-- Spotify settings (only when connected): a small menu instead of a loose link -->
+            <div class="sp-menu-wrap" id="sp-menu-wrap" style="display:none">
+              <button class="round-btn sm sp-menu-btn" id="sp-menu-btn" aria-label="Spotify settings" aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" class="dot"/><circle cx="12" cy="12" r="1.6" class="dot"/><circle cx="18" cy="12" r="1.6" class="dot"/></svg>
+              </button>
+              <div class="sp-menu" id="sp-menu" role="menu" style="display:none">
+                <div class="sp-menu-head">Spotify</div>
+                <button class="sp-menu-item" id="sp-disconnect" role="menuitem">Disconnect Spotify</button>
+              </div>
+            </div>
             <!-- SPOTIFY (or demo controls when Spotify isn't connected) -->
             <div class="media-panel" id="spotify-panel">
               <div class="album-art"><img id="sp-art" alt="" referrerpolicy="no-referrer"><span class="album-art-label">
@@ -337,7 +344,6 @@
                 <div class="demo-note" id="demo-note">Demo only &middot; these controls aren't connected to a player or speaker</div>
                 <div class="sp-account">
                   <button class="sp-connect-btn" id="sp-connect" style="display:none">Connect Spotify</button>
-                  <button class="link-btn" id="sp-disconnect" style="display:none">Disconnect Spotify</button>
                 </div>
               </div>
             </div>
@@ -390,8 +396,15 @@
 
           <div class="card media-volume">
             <div class="vol-head"><svg viewBox="0 0 24 24" class="vol-icon"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>Volume</div>
-            <div class="volume-slider-wrap">
-              <input type="range" min="0" max="100" value="60" class="volume-slider" aria-label="Volume">
+            <div class="vol-body">
+              <div class="volume-slider-wrap">
+                <input type="range" min="0" max="100" value="60" class="volume-slider" aria-label="Volume">
+              </div>
+              <div class="vol-scale" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/></svg>
+              </div>
             </div>
             <button class="mute-btn">Mute</button>
           </div>
@@ -439,7 +452,7 @@
       <!-- PHOTOS -->
       <section class="page" id="photos">
         <button id="fs-btn" aria-label="Fullscreen" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9V5.5C4 4.7 4.7 4 5.5 4H9M15 4h3.5c.8 0 1.5.7 1.5 1.5V9M20 15v3.5c0 .8-.7 1.5-1.5 1.5H15M9 20H5.5C4.7 20 4 19.3 4 18.5V15"/></svg></button>
-        <div class="photo-frame-bg" id="photo-frame-bg" aria-hidden="true"></div>
+        <div class="photo-bg-clip" aria-hidden="true"><div class="photo-frame-bg" id="photo-frame-bg"></div></div>
         <div class="photo-frame">
           <img id="photo-frame-img" alt="Photo Frame" referrerpolicy="no-referrer">
         </div>
