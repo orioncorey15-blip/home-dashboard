@@ -1404,3 +1404,14 @@ body.sp-full .sp-connected .sp-full-vol.vol-off + .sp-full-vol-note { display: b
   .radar-expand::before { top: -7px; -webkit-transform: translateX(-50%); transform: translateX(-50%); }
   #cal-home::before { left: 0; -webkit-transform: translateY(-50%); transform: translateY(-50%); } /* page edge on its left */
 }
+
+/* Narrow portrait (Galaxy Tab A7 Lite upright, ~601x1006): fit the home weather card, the 5-day highs, the
+   calendar header (it ran under the clock) and today's cell, and keep the Spotify tabs on screen. */
+@media (orientation: portrait) and (max-width: 700px) {
+  .home-wx-icon { width: 72px; height: 72px; margin: -6px 4px -6px -6px; }
+  .home-temp { font-size: 52px; }
+  .home-feels { overflow: hidden; text-overflow: ellipsis; }
+  .day { padding-left: 7px; padding-right: 7px; }
+  .day-icon { width: 28px; height: 28px; margin: 0 4px 0 -3px; }
+  .day-hi { font-size: 15px; }
+}
