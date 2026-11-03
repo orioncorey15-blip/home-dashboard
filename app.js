@@ -4035,8 +4035,9 @@
          overlay only wakes (it never clicks what's underneath).
        SCREEN_SLEEP_MODE "off": fully.turnScreenOff(); Fully's motion detection / "Turn Screen On on Motion"
          or our onMotion handler turn it back on.
-     Never sleeps while Spotify / YouTube / Local Music / a <video> or <audio> is playing or the user is busy
-     (full-screen view, sheet, dialog, typing): it only dims to NIGHT_BRIGHTNESS then, no overlay.
+     Never dims or sleeps while Spotify / YouTube / Local Music / a <video> or <audio> is playing (the idle time
+     restarts when it stops). While the user is busy (full-screen view, sheet, dialog, typing) it only dims to
+     NIGHT_BRIGHTNESS, no overlay.
      Motion (fully.bind("onMotion")), Fully's "screenOn" event and touches wake the screen and restart the timer.
      Waking inside the night window (NIGHT_START-NIGHT_END) shows a dim night clock (time, date, temperature) at
      NIGHT_BRIGHTNESS; a tap on it opens the dashboard (still at night brightness). In the day it wakes straight
@@ -4175,8 +4176,11 @@
       lastNight = n;
       if (state === "clock") updateNightClock();
       if (!SLEEP_ON || !F() || state === "asleep") return;
+      // music or video playing counts as activity: the screen never dims or sleeps then, and the idle
+      // time starts again when it stops
+      if (mediaPlaying()) { lastActive = now; return; }
       if (now - lastActive < IDLE_MS) return;
-      if (mediaPlaying() || busy()) dim();
+      if (busy()) dim();
       else sleep();
     }
 

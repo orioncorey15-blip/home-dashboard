@@ -190,8 +190,9 @@ when someone walks up (Fully's camera motion detection) or touches it. Settings 
 | `NIGHT_BRIGHTNESS` | `15` | screen brightness at night, 0-255 |
 | `DAY_BRIGHTNESS` | `null` | brightness by day; `null` = put back whatever it was before the dashboard changed it |
 
-- It never sleeps while Spotify, YouTube, Local Music or any video/audio is playing, or while a full-screen view,
-  sheet or dialog is open, or someone is typing. Then it only dims to `NIGHT_BRIGHTNESS` until a touch or motion.
+- It never dims or sleeps while Spotify, YouTube, Local Music or any video/audio is playing; the 10 minutes start
+  again when playback stops. While a full-screen view, sheet or dialog is open, or someone is typing, it doesn't
+  sleep either: it only dims to `NIGHT_BRIGHTNESS` until a touch or motion.
 - Waking during the night window shows a dim **night clock** (big time, date, current temperature). Tap it to get
   the dashboard (still at night brightness). In the day it wakes straight to the dashboard at day brightness.
 - Without Fully's JavaScript Interface (any other browser) nothing sleeps and the brightness is never touched; the
