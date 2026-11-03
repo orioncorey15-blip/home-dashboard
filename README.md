@@ -195,8 +195,8 @@ when someone walks up (Fully's camera motion detection) or touches it. Settings 
   sleep either: it only dims to `NIGHT_BRIGHTNESS` until a touch or motion.
 - Waking during the night window shows a dim **night clock** (big time, date, current temperature). Tap it to get
   the dashboard (still at night brightness). In the day it wakes straight to the dashboard at day brightness.
-- Without Fully's JavaScript Interface (any other browser) nothing sleeps and the brightness is never touched; the
-  normal night-mode dimming still works.
+- Without Fully's JavaScript Interface (any other browser) it sleeps with the black cover only (a touch wakes it;
+  no motion wake) and the brightness is never touched; the normal night-mode dimming still works.
 
 **Fully Kiosk settings** (setting names as in Fully's docs, https://www.fully-kiosk.com/docs/en/configuration/):
 1. *Advanced Web Settings → Enable JavaScript Interface (PLUS)*: ON (already on for the volume slider).

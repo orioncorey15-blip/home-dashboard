@@ -4042,7 +4042,8 @@
      Waking inside the night window (NIGHT_START-NIGHT_END) shows a dim night clock (time, date, temperature) at
      NIGHT_BRIGHTNESS; a tap on it opens the dashboard (still at night brightness). In the day it wakes straight
      to the dashboard at DAY_BRIGHTNESS (null = whatever brightness the tablet had before we changed it).
-     Without window.fully nothing sleeps and no brightness changes; the night mode CSS dimming still works.
+     Without window.fully it sleeps with the black overlay only (touch wakes; no motion wake, no brightness
+     changes); the night mode CSS dimming still works.
      Note: fully.bind() takes a string of JavaScript (not a function), so the handlers live on window.screenSleep. */
   var screenSleep = (function () {
     var body = document.body;
@@ -4126,7 +4127,7 @@
       if (s === "clock") updateNightClock();
     }
     function sleep() {
-      if (!F()) return;
+      if (MODE === "off" && !F()) return;
       setState("asleep");
       if (MODE === "off") {
         awakeLevel();
@@ -4175,7 +4176,7 @@
       if (lastNight !== null && n !== lastNight && (state === "awake" || state === "clock")) awakeLevel(); // window edge
       lastNight = n;
       if (state === "clock") updateNightClock();
-      if (!SLEEP_ON || !F() || state === "asleep") return;
+      if (!SLEEP_ON || state === "asleep") return;
       // music or video playing counts as activity: the screen never dims or sleeps then, and the idle
       // time starts again when it stops
       if (mediaPlaying()) { lastActive = now; return; }
@@ -4240,12 +4241,13 @@
     if (clock) clock.addEventListener("click", function (e) { if (e && e.stopPropagation) e.stopPropagation(); dismissClock(); });
 
     function init() {
+      if (!F()) MODE = "dim"; // without Fully (any other browser): the black overlay only, brightness untouched
       bindFully();
       lastNight = night();
       if (store.get("screenOurs") === "1") { ours = true; var sv = Number(store.get("screenSaved")); saved = store.get("screenSaved") && sv >= 5 ? sv : null; }
       // after the 3 AM reload (or any reload) while asleep: go straight back to sleep
       var asleepAt = Number(store.get("screenAsleep"));
-      if (SLEEP_ON && F() && asleepAt > 0 && new Date().getTime() - asleepAt < 12 * 3600000 && !(MODE === "off" && call("getScreenOn") === true)) {
+      if (SLEEP_ON && asleepAt > 0 && new Date().getTime() - asleepAt < 12 * 3600000 && !(MODE === "off" && call("getScreenOn") === true)) {
         if (MODE === "dim") { state = "awake"; sleep(); } else setState("asleep");
       } else {
         setState("awake");
