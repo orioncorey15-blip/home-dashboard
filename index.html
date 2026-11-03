@@ -613,6 +613,18 @@
     </main>
   </div>
 
+  <!-- Night clock: shown when the screen wakes during the night window (tap it for the dashboard) -->
+  <div id="night-clock" class="night-clock" style="display:none" role="button" aria-label="Night clock - tap to open the dashboard">
+    <div class="nc-inner">
+      <div class="nc-time" id="nc-time"></div>
+      <div class="nc-date" id="nc-date"></div>
+      <div class="nc-wx"><span class="nc-temp" id="nc-temp"></span><span class="nc-desc" id="nc-desc"></span></div>
+    </div>
+    <div class="nc-hint">Tap to open the dashboard</div>
+  </div>
+  <!-- Screen sleep ("dim" mode): black cover over everything; the first tap only wakes -->
+  <div id="screen-sleep" class="screen-sleep" style="display:none" aria-hidden="true"></div>
+
   <!-- Offline / stale-data notice (filled in by app.js) -->
   <div id="status-badge" class="status-badge" role="status" aria-live="polite"></div>
 

@@ -44,7 +44,8 @@
     set: function (k, v) { try { window.localStorage.setItem(k, String(v)); } catch (e) { /* ignore */ } }
   };
 
-  function isHidden() { return !!(document.hidden || document.webkitHidden); }
+  // hidden tab / screen off, or the "dim" screen sleep overlay is up (nothing on screen can be seen)
+  function isHidden() { return !!(document.hidden || document.webkitHidden || (document.body && /(^|\s)screen-asleep(\s|$)/.test(document.body.className))); }
 
   function fmtTime(d) { return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
 
@@ -204,6 +205,20 @@
      another NAV_HIDE_SECONDS instead. Moving a finger (throttled) and scrolling count as activity.
      While hidden, the content gets ~52 px of left padding so the handle never covers it.
      NAV_AUTOHIDE: false = the rail is always shown. Phones (bottom tab bar) are left alone. */
+  // Something the user is in the middle of: typing, a full-screen view (player / radar / YouTube max / real
+  // fullscreen), a sheet or dialog. The nav rail doesn't slide away and the screen doesn't sleep while it's true.
+  function uiBusy() {
+    var body = document.body;
+    function shown(el) { return !!el && (el.offsetWidth > 0 || el.offsetHeight > 0); }
+    var a = document.activeElement, tag = a && a.tagName ? String(a.tagName).toUpperCase() : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable)) return true;
+    var cls = " " + body.className + " ";
+    if (/ (sp-full|lm-full|radar-full|yt-max-open) /.test(cls)) return true;
+    if (document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement || document.mozFullScreenElement) return true;
+    var open = document.querySelectorAll(".modal.open, .spb-sheet, .bt-help, [role=\"dialog\"]");
+    for (var i = 0; i < open.length; i++) if (shown(open[i])) return true;
+    return false;
+  }
   var navHide = (function () {
     var on = CFG.NAV_AUTOHIDE !== false;
     var secs = Number(CFG.NAV_HIDE_SECONDS);
@@ -218,19 +233,7 @@
     // a finger/pointer is down (a missed "up" stops counting after 30 s)
     var downAt = 0;
     function pressing() { return downAt > 0 && (new Date().getTime() - downAt) < 30000; }
-    function shown(el) { return !!el && (el.offsetWidth > 0 || el.offsetHeight > 0); }
-    // something the rail mustn't slide away under: typing, a full-screen view, a sheet or dialog
-    function busy() {
-      if (pressing()) return true;
-      var a = document.activeElement, tag = a && a.tagName ? String(a.tagName).toUpperCase() : "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable)) return true;
-      var cls = " " + body.className + " ";
-      if (/ (sp-full|lm-full|radar-full|yt-max-open) /.test(cls)) return true;
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement || document.mozFullScreenElement) return true;
-      var open = document.querySelectorAll(".modal.open, .spb-sheet, .bt-help, [role=\"dialog\"]");
-      for (var i = 0; i < open.length; i++) if (shown(open[i])) return true;
-      return false;
-    }
+    function busy() { return pressing() || uiBusy(); }
     function arm() {
       if (timer) clearTimeout(timer);
       timer = null;
@@ -279,7 +282,7 @@
     }
     function down() { downAt = new Date().getTime(); activity(); }
     function up(e) { if (e && e.touches && e.touches.length) return; downAt = 0; activity(); }
-    if (!on) return { arm: function () {}, state: function () { return "off"; } };
+    if (!on) return { arm: function () {}, pressing: pressing, state: function () { return "off"; } };
     toggleClass(body, "nav-auto", true);
     each(["touchstart", "mousedown", "pointerdown"], function (t) { document.addEventListener(t, down, true); });
     each(["touchend", "touchcancel", "mouseup", "pointerup", "pointercancel"], function (t) { document.addEventListener(t, up, true); });
@@ -294,7 +297,7 @@
     }
     each(document.querySelectorAll(".nav-btn"), function (btn) { btn.addEventListener("click", arm); });
     arm(); // the timer starts at page load
-    return { arm: arm, reveal: reveal, close: close, state: function () { return state; } };
+    return { arm: arm, reveal: reveal, close: close, pressing: pressing, state: function () { return state; } };
   })();
   window.navHide = navHide;
 
@@ -385,28 +388,49 @@
   setInterval(updateClock, 1000);
 
   /* ===== NIGHT MODE (manual button + optional schedule) ===== */
-  // NIGHT_MODE_START / NIGHT_MODE_END are hours 0-23 (e.g. 22 and 6). null turns the schedule off.
+  // NIGHT_START / NIGHT_END are "HH:MM" times (default "22:00" / "06:30"); NIGHT_MODE: false turns the schedule off.
+  // Older configs with NIGHT_MODE_START / NIGHT_MODE_END (hours 0-23, null = off) still work and win if present.
   // The button always works; the schedule re-applies at the next start/end time.
+  // The same window drives the screen-sleep night clock and night brightness (see SCREEN SLEEP below).
   var nightBtn = $("night-toggle");
   function validHour(h) { return typeof h === "number" && h >= 0 && h <= 23 && Math.floor(h) === h; }
-  // Missing keys (e.g. a config.js made before this setting existed) use the documented 22 / 6 default.
-  var NIGHT_START = CFG.NIGHT_MODE_START === undefined ? 22 : CFG.NIGHT_MODE_START;
-  var NIGHT_END = CFG.NIGHT_MODE_END === undefined ? 6 : CFG.NIGHT_MODE_END;
-  var NIGHT_SCHEDULED = validHour(NIGHT_START) && validHour(NIGHT_END) && NIGHT_START !== NIGHT_END;
-
-  function isNightHour(h) {
-    return NIGHT_START < NIGHT_END ? (h >= NIGHT_START && h < NIGHT_END) : (h >= NIGHT_START || h < NIGHT_END);
+  // "22:00" / "6:30" / 22 -> minutes after midnight, or null when it isn't a valid time
+  function parseHM(v) {
+    if (validHour(v)) return v * 60;
+    var m = typeof v === "string" ? v.match(/^\s*(\d{1,2})(?::(\d{2}))?\s*$/) : null;
+    if (!m) return null;
+    var h = Number(m[1]), mi = m[2] ? Number(m[2]) : 0;
+    return (h <= 23 && mi <= 59) ? h * 60 + mi : null;
   }
-  // Identifies the current scheduled period by its starting boundary (e.g. "night@2026-10-20 22").
+  var NIGHT_START, NIGHT_END;
+  if (CFG.NIGHT_MODE_START !== undefined || CFG.NIGHT_MODE_END !== undefined) { // legacy hour keys
+    NIGHT_START = validHour(CFG.NIGHT_MODE_START) ? CFG.NIGHT_MODE_START * 60 : null;
+    NIGHT_END = validHour(CFG.NIGHT_MODE_END) ? CFG.NIGHT_MODE_END * 60 : null;
+  } else if (CFG.NIGHT_MODE === false) {
+    NIGHT_START = NIGHT_END = null;
+  } else { // missing keys (e.g. a config.js made before this setting existed) use the documented default
+    NIGHT_START = parseHM(CFG.NIGHT_START === undefined ? "22:00" : CFG.NIGHT_START);
+    NIGHT_END = parseHM(CFG.NIGHT_END === undefined ? "06:30" : CFG.NIGHT_END);
+  }
+  var NIGHT_SCHEDULED = NIGHT_START !== null && NIGHT_END !== null && NIGHT_START !== NIGHT_END;
+
+  // Is minute-of-day m inside the night window? Handles windows that cross midnight (22:00-06:30).
+  function inNightWindow(m, start, end) {
+    if (start === null || end === null || start === end) return false;
+    return start < end ? (m >= start && m < end) : (m >= start || m < end);
+  }
+  function isNightAt(d) { return inNightWindow(d.getHours() * 60 + d.getMinutes(), NIGHT_START, NIGHT_END); }
+  // Identifies the current scheduled period by its starting boundary (e.g. "night@2026-10-20 22:00").
   function nightPeriodKey(now) {
-    var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
-    var night = isNightHour(t.getHours());
-    for (var i = 0; i < 48; i++) {
-      var prev = new Date(t.getTime() - 3600000);
-      if (isNightHour(prev.getHours()) !== night) break;
-      t = prev;
+    var night = isNightAt(now), best = null;
+    for (var back = 0; back <= 2; back++) {
+      var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
+      var mins = night ? NIGHT_START : NIGHT_END;
+      var b = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(mins / 60), mins % 60);
+      if (b.getTime() <= now.getTime() && (!best || b.getTime() > best.getTime())) best = b;
     }
-    return (night ? "night@" : "day@") + dayKey(t) + " " + t.getHours();
+    if (!best) best = now;
+    return (night ? "night@" : "day@") + dayKey(best) + " " + pad2(best.getHours()) + ":" + pad2(best.getMinutes());
   }
 
   function setNight(on) {
@@ -429,7 +453,7 @@
     if (first && store.get("nightModePeriod") === key && store.get("nightMode") !== null) {
       setNight(store.get("nightMode") === "true");
     } else {
-      setNight(isNightHour(now.getHours()));
+      setNight(isNightAt(now));
     }
   }
 
@@ -4003,6 +4027,238 @@
   }
   document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("webkitvisibilitychange", onVisibility);
+
+  /* ===== SCREEN SLEEP, WAKE ON APPROACH, NIGHT CLOCK (Fully Kiosk PLUS JavaScript Interface) =====
+     SCREEN_IDLE_MINUTES (default 10) with no touch and no motion puts the screen to sleep:
+       SCREEN_SLEEP_MODE "dim" (default): brightness to the minimum + a full-screen black overlay. The screen stays
+         technically on, which keeps Wi-Fi and the page awake on cheap Samsung tablets. The first touch on the
+         overlay only wakes (it never clicks what's underneath).
+       SCREEN_SLEEP_MODE "off": fully.turnScreenOff(); Fully's motion detection / "Turn Screen On on Motion"
+         or our onMotion handler turn it back on.
+     Never sleeps while Spotify / YouTube / Local Music / a <video> or <audio> is playing or the user is busy
+     (full-screen view, sheet, dialog, typing): it only dims to NIGHT_BRIGHTNESS then, no overlay.
+     Motion (fully.bind("onMotion")), Fully's "screenOn" event and touches wake the screen and restart the timer.
+     Waking inside the night window (NIGHT_START-NIGHT_END) shows a dim night clock (time, date, temperature) at
+     NIGHT_BRIGHTNESS; a tap on it opens the dashboard (still at night brightness). In the day it wakes straight
+     to the dashboard at DAY_BRIGHTNESS (null = whatever brightness the tablet had before we changed it).
+     Without window.fully nothing sleeps and no brightness changes; the night mode CSS dimming still works.
+     Note: fully.bind() takes a string of JavaScript (not a function), so the handlers live on window.screenSleep. */
+  var screenSleep = (function () {
+    var body = document.body;
+    var MODE = CFG.SCREEN_SLEEP_MODE === "off" ? "off" : "dim";
+    var mins = Number(CFG.SCREEN_IDLE_MINUTES);
+    var IDLE_MS = (mins > 0 ? mins : 10) * 60000;
+    var SLEEP_ON = CFG.SCREEN_SLEEP !== false;
+    var NIGHT_ON = CFG.NIGHT_MODE !== false && NIGHT_SCHEDULED;
+    function level(v, dflt) { var n = Number(v); return (v === null || v === undefined || v === "" || isNaN(n)) ? dflt : Math.max(0, Math.min(255, Math.round(n))); }
+    var NIGHT_LEVEL = level(CFG.NIGHT_BRIGHTNESS, 15);
+    var DAY_LEVEL = level(CFG.DAY_BRIGHTNESS, null);  // null = restore the saved brightness
+    var SLEEP_LEVEL = 1;                              // "dim" mode: lowest level that doesn't count as "off" anywhere
+    var overlay = $("screen-sleep"), clock = $("night-clock");
+    var state = "awake";        // awake | dimmed (idle but playing/busy) | asleep | clock (night clock showing)
+    var lastActive = new Date().getTime();
+    var saved = null;           // brightness before we first changed it (for DAY_BRIGHTNESS null)
+    var ours = false;           // the current brightness was set by us
+    var swallowing = false, swallowAfter = false; // the click that follows a wake tap is eaten (no click-through)
+    var lastNight = null, lastMove = 0, bound = false;
+
+    function F() { return getFully(); }
+    function call(name, a, b) {
+      var f = F();
+      if (!f || typeof f[name] !== "function") return undefined;
+      try { return b === undefined ? (a === undefined ? f[name]() : f[name](a)) : f[name](a, b); } catch (e) { return undefined; }
+    }
+    function night() { return NIGHT_ON && isNightAt(new Date()); }
+    function has(name) { return fullyHas(name); }
+
+    // ---- brightness ----
+    function readLevel() {
+      var v = Number(call("getScreenBrightness"));
+      if (isNaN(v) || v < 0) return null;
+      if (v > 0 && v <= 1 && Math.floor(v) !== v) v = v * 255; // some builds report 0..1
+      v = Math.round(v);
+      return v >= 5 ? Math.min(255, v) : null; // too dark to be a real "day" level: fall back to the default
+    }
+    function setLevel(v) {
+      if (!has("setScreenBrightness")) return;
+      if (!ours) { // remember the tablet's own level (kept across reloads, e.g. the 3 AM one)
+        saved = readLevel(); ours = true;
+        store.set("screenOurs", "1"); store.set("screenSaved", saved === null ? "" : String(saved));
+      }
+      call("setScreenBrightness", v);
+    }
+    function restoreDay() {
+      if (!has("setScreenBrightness")) return;
+      if (DAY_LEVEL !== null) call("setScreenBrightness", DAY_LEVEL);
+      else if (ours) call("setScreenBrightness", saved === null ? -1 : saved); // -1 = Fully's / the system default
+      else return; // we never changed it
+      ours = false; saved = null; store.set("screenOurs", ""); store.set("screenSaved", "");
+    }
+    function awakeLevel() {
+      var n = night();
+      if (n) setLevel(NIGHT_LEVEL); else restoreDay();
+      toggleClass(body, "hw-dim", n && has("setScreenBrightness")); // the CSS night overlay can be lighter
+    }
+
+    // ---- media / busy ----
+    function mediaPlaying() {
+      try {
+        if (typeof spotify !== "undefined" && spotify && spotify.connected() && spotify.info().playing) return true;
+        if (typeof youtube !== "undefined" && youtube && youtube.isPlaying()) return true;
+        if (localMusic && localMusic.isPlaying()) return true;
+        var els = document.querySelectorAll("video, audio");
+        for (var i = 0; i < els.length; i++) if (!els[i].paused && !els[i].ended && els[i].currentTime > 0) return true;
+      } catch (e) { /* ignore */ }
+      return false;
+    }
+    function busy() { return uiBusy() || (typeof navHide !== "undefined" && navHide.pressing && navHide.pressing()); }
+
+    // ---- views ----
+    function setState(s) {
+      state = s;
+      toggleClass(body, "screen-asleep", s === "asleep" && MODE === "dim");
+      toggleClass(body, "screen-off", s === "asleep" && MODE === "off");
+      toggleClass(body, "night-clock-on", s === "clock");
+      if (overlay) overlay.style.display = (s === "asleep" && MODE === "dim") ? "block" : "none";
+      if (clock) clock.style.display = s === "clock" ? "" : "none";
+      if (s === "asleep") store.set("screenAsleep", String(new Date().getTime())); else store.set("screenAsleep", "");
+      if (s === "clock") updateNightClock();
+    }
+    function sleep() {
+      if (!F()) return;
+      setState("asleep");
+      if (MODE === "off") {
+        awakeLevel();
+        if (has("turnScreenOff")) call("turnScreenOff", true); // keepAlive: keep Fully (and this page) running
+      } else {
+        setLevel(SLEEP_LEVEL);
+      }
+      onVisibility(); // pause the slideshow / radar loop while nothing can be seen
+    }
+    function dim() {
+      if (state === "dimmed" || !F()) return;
+      setState("dimmed");
+      setLevel(Math.min(NIGHT_LEVEL, 255));
+    }
+    function wake(fromMotion) {
+      var was = state;
+      lastActive = new Date().getTime();
+      if (was === "awake" || was === "clock") return;
+      if (was === "asleep" && MODE === "off" && has("turnScreenOn") && call("getScreenOn") !== true) call("turnScreenOn");
+      if (was === "asleep" && night()) {
+        setState("clock");
+        setLevel(NIGHT_LEVEL);
+      } else {
+        setState("awake");
+        awakeLevel();
+      }
+      if (was === "asleep") onVisibility();
+    }
+    function dismissClock() { if (state === "clock") { setState("awake"); awakeLevel(); lastActive = new Date().getTime(); } }
+
+    function updateNightClock() {
+      if (state !== "clock") return;
+      var now = new Date();
+      setClock("nc-time", fmtTime(now));
+      setText("nc-date", now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }));
+      var c = lastCurrent, t = c && c.main ? deg(c.main.temp) : "";
+      var d = c && c.weather && c.weather[0] && c.weather[0].description ? String(c.weather[0].description) : "";
+      setText("nc-temp", t);
+      setText("nc-desc", d ? d.charAt(0).toUpperCase() + d.slice(1) : "");
+    }
+
+    // ---- the idle check (every 5 s) ----
+    function tick() {
+      var now = new Date().getTime();
+      var n = night();
+      if (lastNight !== null && n !== lastNight && (state === "awake" || state === "clock")) awakeLevel(); // window edge
+      lastNight = n;
+      if (state === "clock") updateNightClock();
+      if (!SLEEP_ON || !F() || state === "asleep") return;
+      if (now - lastActive < IDLE_MS) return;
+      if (mediaPlaying() || busy()) dim();
+      else sleep();
+    }
+
+    // ---- input ----
+    function inside(el, box) { for (; el; el = el.parentNode) if (el === box) return true; return false; }
+    function onDown(e) {
+      var t = e && e.target;
+      if (state === "asleep" || state === "dimmed" || (state === "clock" && inside(t, clock))) {
+        var cover = state === "asleep" || state === "clock";
+        if (cover) {
+          // this touch only wakes: nothing underneath gets it, nor the click that follows
+          swallowing = true;
+          if (e.cancelable && e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+        }
+        if (state === "clock") dismissClock(); else wake(false);
+        return;
+      }
+      lastActive = new Date().getTime();
+    }
+    function onUp() {
+      if (!swallowing) return;
+      swallowing = false; swallowAfter = true; // the click comes right after the finger lifts
+      setTimeout(function () { swallowAfter = false; }, 500);
+    }
+    function onClick(e) {
+      if (swallowing || swallowAfter) { if (e.preventDefault) e.preventDefault(); if (e.stopPropagation) e.stopPropagation(); }
+    }
+    function onMove() {
+      var now = new Date().getTime();
+      if (now - lastMove < 1000) return;
+      lastMove = now;
+      if (state === "awake") lastActive = now;
+    }
+
+    function bindFully() {
+      if (bound || !F() || !has("bind")) return;
+      bound = true;
+      call("bind", "onMotion", "window.screenSleep && window.screenSleep.onMotion();");
+      call("bind", "screenOn", "window.screenSleep && window.screenSleep.onScreenOn();");
+      call("bind", "screenOff", "window.screenSleep && window.screenSleep.onScreenOff();");
+      call("bind", "onScreensaverStop", "window.screenSleep && window.screenSleep.onMotion();");
+    }
+
+    // touchstart must not be passive (Chrome makes document-level touch listeners passive by default)
+    var PASSIVE_OFF = true;
+    try { var o = Object.defineProperty({}, "passive", { get: function () { PASSIVE_OFF = { capture: true, passive: false }; return false; } }); window.addEventListener("ss-test", null, o); } catch (e) { /* old browser */ }
+    document.addEventListener("touchstart", onDown, PASSIVE_OFF);
+    each(["mousedown", "pointerdown", "keydown"], function (t) { document.addEventListener(t, onDown, true); });
+    each(["touchend", "touchcancel", "mouseup", "pointerup", "pointercancel"], function (t) { document.addEventListener(t, onUp, true); });
+    each(["touchmove", "mousemove", "wheel", "scroll"], function (t) { document.addEventListener(t, onMove, true); });
+    document.addEventListener("click", onClick, true);
+    if (clock) clock.addEventListener("click", function (e) { if (e && e.stopPropagation) e.stopPropagation(); dismissClock(); });
+
+    function init() {
+      bindFully();
+      lastNight = night();
+      if (store.get("screenOurs") === "1") { ours = true; var sv = Number(store.get("screenSaved")); saved = store.get("screenSaved") && sv >= 5 ? sv : null; }
+      // after the 3 AM reload (or any reload) while asleep: go straight back to sleep
+      var asleepAt = Number(store.get("screenAsleep"));
+      if (SLEEP_ON && F() && asleepAt > 0 && new Date().getTime() - asleepAt < 12 * 3600000 && !(MODE === "off" && call("getScreenOn") === true)) {
+        if (MODE === "dim") { state = "awake"; sleep(); } else setState("asleep");
+      } else {
+        setState("awake");
+        if (F()) awakeLevel();
+      }
+      setInterval(tick, 5000);
+    }
+
+    return {
+      init: init, tick: tick, wake: wake, sleep: sleep, dismissClock: dismissClock, isNightAt: isNightAt,
+      inWindow: inNightWindow, parseTime: parseHM, mediaPlaying: mediaPlaying,
+      onMotion: function () { lastActive = new Date().getTime(); if (state !== "awake" && state !== "clock") wake(true); },
+      onScreenOn: function () { if (state === "asleep") wake(true); else lastActive = new Date().getTime(); },
+      onScreenOff: function () { if (MODE === "off" && F() && state !== "asleep") { state = "awake"; setState("asleep"); } },
+      state: function () { return state; }, mode: function () { return MODE; },
+      _idle: function (ms) { lastActive = new Date().getTime() - ms; }
+    };
+  })();
+  window.screenSleep = screenSleep;
+  screenSleep.init();
+
 
   /*
    * Offline / stale-data badge: tells you when the weather or calendar on

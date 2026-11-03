@@ -76,8 +76,10 @@ Key hygiene:
 4. Android settings: *Lock screen → None*. *Battery → Fully Kiosk → Don't optimize*. Keep the tablet on its charger.
 5. Restart the tablet once to check it boots straight into the dashboard.
 
-Night mode dims the screen on the schedule in `config.js` (`NIGHT_MODE_START` / `NIGHT_MODE_END`, default 22 and 6;
-`null` turns the schedule off). The page reloads itself every night at `DAILY_RELOAD_HOUR` (default 3 AM).
+Night mode dims the screen on the schedule in `config.js` (`NIGHT_START` / `NIGHT_END`, "HH:MM", default
+"22:00" and "06:30"; `NIGHT_MODE: false` turns the schedule off; old `NIGHT_MODE_START` / `NIGHT_MODE_END` hour
+settings still work). The page reloads itself every night at `DAILY_RELOAD_HOUR` (default 3 AM).
+Screen sleep and wake-on-approach: see section 7.
 
 ## 3. Spotify (optional)
 Media → Spotify becomes an Android Auto-style browser once connected: your **Playlists**, **Liked Songs**, **Recent**,
@@ -174,6 +176,48 @@ Media → **Local Music** plays the home Navidrome library (Subsonic API) in the
   warn that Android WebView 111+ may still block some mixed content (local IPs especially), so prefer Tailscale.
 - Streams use `format=mp3&maxBitRate=NAVIDROME_MAX_BITRATE` (192), falling back to the original file. Plays are
   scrobbled to Navidrome (now playing at the start, played after half the song).
+
+## 7. Screen sleep, wake on approach and night clock (Fully Kiosk PLUS)
+The dashboard puts the screen to sleep after `SCREEN_IDLE_MINUTES` (10) with no touch and no motion, and wakes it
+when someone walks up (Fully's camera motion detection) or touches it. Settings in `config.js`:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `SCREEN_SLEEP` | `true` | `false` = never sleep (night brightness still applies) |
+| `SCREEN_SLEEP_MODE` | `"dim"` | `"dim"`: brightness to the minimum + a black cover. The screen stays technically on, so Wi-Fi stays connected on cheap Samsung tablets. The first touch only wakes (it never presses what's underneath). `"off"`: really turns the screen off with `fully.turnScreenOff()`; a touch can't wake an off screen, only motion or the power button |
+| `SCREEN_IDLE_MINUTES` | `10` | minutes without touch or motion before sleeping |
+| `NIGHT_MODE`, `NIGHT_START`, `NIGHT_END` | `true`, `"22:00"`, `"06:30"` | the night window (can cross midnight) |
+| `NIGHT_BRIGHTNESS` | `15` | screen brightness at night, 0-255 |
+| `DAY_BRIGHTNESS` | `null` | brightness by day; `null` = put back whatever it was before the dashboard changed it |
+
+- It never sleeps while Spotify, YouTube, Local Music or any video/audio is playing, or while a full-screen view,
+  sheet or dialog is open, or someone is typing. Then it only dims to `NIGHT_BRIGHTNESS` until a touch or motion.
+- Waking during the night window shows a dim **night clock** (big time, date, current temperature). Tap it to get
+  the dashboard (still at night brightness). In the day it wakes straight to the dashboard at day brightness.
+- Without Fully's JavaScript Interface (any other browser) nothing sleeps and the brightness is never touched; the
+  normal night-mode dimming still works.
+
+**Fully Kiosk settings** (setting names as in Fully's docs, https://www.fully-kiosk.com/docs/en/configuration/):
+1. *Advanced Web Settings → Enable JavaScript Interface (PLUS)*: ON (already on for the volume slider).
+2. *Motion Detection (PLUS) → Enable Visual Motion Detection*: ON. The first time, Android asks for camera
+   permission: allow it. *Select Camera*: the front camera. Fully suggests *Detector Sensitivity* 90-95.
+   *Show Cam Preview* helps to check what the camera sees (turn it off afterwards).
+   *Turn Screen Off in Darkness*: OFF.
+   With `SCREEN_SLEEP_MODE: "off"` also turn *Turn Screen On on Motion* ON (Fully then switches the screen on
+   itself; the page may be paused while the screen is off).
+3. Stop Fully's own timers from fighting the dashboard's:
+   - *Device Management → Screen Off Timer (PLUS)*: empty / 0 (off).
+   - *Screensaver (PLUS) → Screensaver Timer*: empty / 0 (off).
+   - *Power Settings → Schedule Wakeup and Sleep (PLUS)*: not set (Fully stops motion detection at its scheduled
+     sleep time).
+   - *Device Management → Keep Screen On*: ON (stops Android's own screen timeout).
+   - *Device Management → Screen Brightness*: empty (system default), so it doesn't fight the night brightness.
+     (Unsure whether Fully re-applies this setting on its own; leaving it empty avoids the question.)
+4. Only for `SCREEN_SLEEP_MODE: "off"`: Fully needs the Android *Device Admin* permission to turn the screen off
+   (Fully asks for it; the exact Android menu varies by device), and *Power Settings → Prevent from Sleep while
+   Screen Off* ON helps keep motion detection running.
+5. Android 14+: Fully 1.59 or newer is needed for reliable motion detection; turn off Android's Face Unlock so the
+   camera is free.
 
 ## Photos
 `PHOTO_SOURCE` in `config.js`:

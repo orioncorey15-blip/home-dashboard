@@ -17,11 +17,25 @@ var CONFIG = {
   // Optional: change photo slideshow interval (ms)
   SLIDESHOW_INTERVAL: 8000,
 
-  // Optional: turn night mode on/off automatically (hours 0-23). The Night Mode
-  // button still works; the schedule takes over again at the next start/end time.
-  // Set both to null to turn the schedule off.
-  NIGHT_MODE_START: 22,
-  NIGHT_MODE_END: 6,
+  // Night mode: dims the dashboard from NIGHT_START to NIGHT_END ("HH:MM", 24-hour; may cross midnight).
+  // The Night Mode button still works; the schedule takes over again at the next start/end time.
+  // NIGHT_MODE: false turns the schedule (and the night clock / night brightness below) off.
+  NIGHT_MODE: true,
+  NIGHT_START: "22:00",
+  NIGHT_END: "06:30",
+
+  // Screen sleep + wake on approach (needs Fully Kiosk PLUS with the JavaScript Interface on; see README).
+  // After SCREEN_IDLE_MINUTES with no touch and no motion the screen sleeps (never while music/video plays or
+  // a full-screen view or dialog is open: it only dims then). Motion in front of the camera or a touch wakes it.
+  //   SCREEN_SLEEP_MODE "dim": lowest brightness + a black cover; keeps Wi-Fi awake (recommended for this tablet)
+  //   SCREEN_SLEEP_MODE "off": really turns the screen off (some tablets drop Wi-Fi then)
+  // At night it wakes to a dim clock (tap it for the dashboard).
+  // Brightness is 0-255: NIGHT_BRIGHTNESS at night; DAY_BRIGHTNESS by day (null = whatever it was before).
+  SCREEN_SLEEP: true,
+  SCREEN_SLEEP_MODE: "dim",
+  SCREEN_IDLE_MINUTES: 10,
+  NIGHT_BRIGHTNESS: 15,
+  DAY_BRIGHTNESS: null,
 
   // Optional: hide the page buttons on the left after this many seconds without a touch.
   // A thin line at the left edge brings them back. Set NAV_AUTOHIDE to false to always show them.

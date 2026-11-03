@@ -1558,3 +1558,49 @@ body.lm-full .nav-handle { display: none; }
   .lm-chip { height: 34px; }
   .lm-chip::before { top: -5px; bottom: -5px; }
 }
+
+/* ----- Screen sleep + night clock (CONFIG.SCREEN_SLEEP / SCREEN_SLEEP_MODE / NIGHT_*; app.js "SCREEN SLEEP") -----
+   .screen-sleep      "dim" sleep: pure black cover above everything (brightness is at the minimum too);
+                      it takes the waking tap so nothing underneath is clicked
+   .night-clock       the dim clock shown when the screen wakes at night; a tap opens the dashboard
+   body.hw-dim        Fully controls the real brightness at night, so the CSS night overlay can be lighter */
+.screen-sleep {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10050;
+  background: #000; cursor: none; -webkit-tap-highlight-color: transparent; touch-action: none;
+}
+body.screen-asleep *, body.night-clock-on .page * { -webkit-animation-play-state: paused !important; animation-play-state: paused !important; }
+
+.night-clock {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10040;
+  display: -webkit-flex;
+  display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+  background: #000; color: #9aa3bd; text-align: center; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.nc-inner { margin-top: -10px; }
+.nc-time {
+  font-size: 168px; line-height: 1; font-weight: 300; letter-spacing: -0.04em; color: #b4bcd3;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.nc-time .ampm { font-size: 44px; font-weight: 400; letter-spacing: 0; margin-left: 12px; color: #7d86a1; }
+.nc-date { margin-top: 18px; font-size: 26px; font-weight: 400; color: #8d96b0; }
+.nc-wx { margin-top: 26px; font-size: 22px; color: #7d86a1; }
+.nc-temp { font-size: 40px; font-weight: 500; color: #a7b0c8; vertical-align: -4px; }
+.nc-temp:empty, .nc-desc:empty { display: none; }
+.nc-desc { margin-left: 14px; }
+.nc-hint { position: absolute; left: 0; right: 0; bottom: 22px; font-size: 13px; color: #4a5168; letter-spacing: 0.04em; }
+
+/* portrait / small screens */
+@media (max-width: 700px) {
+  .nc-time { font-size: 112px; }
+  .nc-time .ampm { font-size: 32px; }
+  .nc-date { font-size: 20px; }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .nc-time { font-size: 120px; }
+  .nc-date { margin-top: 10px; }
+  .nc-wx { margin-top: 14px; }
+}
+
+/* with Fully setting the real night brightness, the CSS night overlay only needs to take the edge off */
+body.night.hw-dim::after { background: rgba(2, 4, 12, 0.3); }
