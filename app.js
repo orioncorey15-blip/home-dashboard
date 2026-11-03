@@ -4190,6 +4190,10 @@
       var t = e && e.target;
       if (state === "asleep" || state === "dimmed" || (state === "clock" && inside(t, clock))) {
         var cover = state === "asleep" || state === "clock";
+        if (cover && e && e.type === "keydown") { // no finger to lift (so no "up" ends the swallowing): just eat the key
+          if (e.preventDefault) e.preventDefault();
+          cover = false;
+        }
         if (cover) {
           // this touch only wakes: nothing underneath gets it, nor the click that follows
           swallowing = true;
